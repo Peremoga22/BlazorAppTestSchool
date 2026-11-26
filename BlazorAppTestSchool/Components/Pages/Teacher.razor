@@ -1,14 +1,28 @@
 @page "/teacher"
 @layout BiologyLayout
+@rendermode InteractiveServer
 @using BlazorAppTestSchool.Data
+@using BlazorAppTestSchool.Data.Testing
 @using static BlazorAppTestSchool.Data.BiologyAttemptReport
 @inject BiologyAttemptStore AttemptStore
+@inject TestDefinitionStore TestStore
 @inject IWebHostEnvironment Environment
 @inject ILogger<Teacher> Logger
 
 @if (Preview)
 {
-    <BiologyTest @rendermode="InteractiveServer" />
+    @if (previewTest is { } test)
+    {
+        <TestRunner Test="test" />
+    }
+    else
+    {
+        <section class="school-lab" aria-labelledby="preview-missing-heading">
+            <h1 id="preview-missing-heading">Немає тесту для перегляду</h1>
+            <p>Завантажте файл тесту нижче або оберіть інший у списку.</p>
+            <a class="btn btn-outline-secondary" href="teacher">До сторінки вчителя</a>
+        </section>
+    }
 }
 else
 {
@@ -16,12 +30,10 @@ else
 
     <section class="school-lab" aria-labelledby="teacher-heading">
         <h1 id="teacher-heading">Сторінка вчителя</h1>
-        <p>Біологія · 7 клас · 12 завдань</p>
-        <a class="btn btn-outline-secondary mb-4" href="teacher?preview=true">Переглянути контрольну</a>
 
         @if (!canViewReports)
         {
-            <p>Роботи учнів доступні в локальному режимі розробки.</p>
+            <p>Роботи учнів і завантаження тестів доступні в локальному режимі розробки.</p>
         }
         else if (message is not null)
         {
@@ -72,6 +84,70 @@ else
         }
         else
         {
+            <section class="teacher-tests mb-4" aria-labelledby="tests-heading">
+                <h2 id="tests-heading" class="h4">Тести</h2>
+                <p>
+                    Завантаж файл тесту у форматі JSON за
+                    <a href="test-template.json" data-enhance-nav="false">стандартом (шаблон)</a>.
+                </p>
+                <div class="teacher-upload">
+                    <InputFile OnChange="OnFileSelectedAsync" accept=".json" class="form-control" />
+                </div>
+                @if (uploadError is { Length: > 0 } errors)
+                {
+                    <ul class="text-danger mt-2" role="alert">
+                        @foreach (var error in errors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                }
+                else if (uploadSuccess is not null)
+                {
+                    <p class="text-success mt-2" role="status">@uploadSuccess</p>
+                }
+
+                @if (uploadedTests.Length > 0)
+                {
+                    <div class="table-responsive mt-3">
+                        <table class="table align-middle">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Назва</th>
+                                    <th scope="col">Предмет / клас</th>
+                                    <th scope="col">Завантажено</th>
+                                    <th scope="col">Статус</th>
+                                    <th scope="col"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var test in uploadedTests)
+                                {
+                                    <tr>
+                                        <td>@test.Title</td>
+                                        <td>@test.Subject @(test.Grade is { } g ? $"· {g} клас" : null)</td>
+                                        <td>@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                        <td>
+                                            @if (test.IsActive)
+                                            {
+                                                <span class="badge text-bg-success">Активний</span>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ActivateAsync(test.Id)">
+                                                    Зробити активним
+                                                </button>
+                                            }
+                                        </td>
+                                        <td><a href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+
             <h2 class="h4">Роботи учнів</h2>
             @if (attempts.Length == 0)
             {
@@ -130,13 +206,18 @@ else
 
 @code {
     [SupplyParameterFromQuery] private bool Preview { get; set; }
+    [SupplyParameterFromQuery(Name = "test")] private string? TestId { get; set; }
     [SupplyParameterFromQuery(Name = "attempt")] private string? Attempt { get; set; }
     [SupplyParameterFromQuery(Name = "page")] private string? PageNumber { get; set; }
     [CascadingParameter] private HttpContext? HttpContext { get; set; }
 
+    private TestDefinitionModel? previewTest;
     private BiologyAttemptReport? report;
     private BiologyAttemptSummary[] attempts = [];
+    private TestDefinitionSummary[] uploadedTests = [];
     private string? message;
+    private string? uploadSuccess;
+    private string[]? uploadError;
     private bool canViewReports;
     private bool hasMore;
     private int CurrentPage => int.TryParse(PageNumber, out var page) && page is > 0 and <= int.MaxValue / BiologyAttemptStore.PageSize ? page : 1;
@@ -145,16 +226,19 @@ else
     {
         if (Preview)
         {
+            previewTest = TestId is { Length: > 0 } id && Guid.TryParse(id, out var testId)
+                ? await TestStore.GetAsync(testId)
+                : await TestStore.GetActiveAsync(BiologySeed.Subject, 7);
             return;
         }
 
         if (HttpContext is { } requestContext)
         {
             requestContext.Response.Headers.CacheControl = "no-store";
+            canViewReports = TeacherReportAccess.CanView(Environment, requestContext);
         }
 
-        canViewReports = TeacherReportAccess.CanView(Environment, HttpContext);
-        if (!canViewReports || HttpContext is not { } context)
+        if (!canViewReports)
         {
             return;
         }
@@ -163,23 +247,65 @@ else
         {
             if (Attempt is null)
             {
-                (attempts, hasMore) = await AttemptStore.ListAsync(CurrentPage, context.RequestAborted);
+                (attempts, hasMore) = await AttemptStore.ListAsync(CurrentPage, CancellationToken.None);
+                uploadedTests = await TestStore.ListAsync();
                 return;
             }
 
             report = Guid.TryParse(Attempt, out var attemptId)
-                ? await AttemptStore.FindAsync(attemptId, context.RequestAborted)
+                ? await AttemptStore.FindAsync(attemptId, CancellationToken.None)
                 : null;
             if (report is null)
             {
                 message = "Роботу не знайдено.";
             }
         }
-        catch (Exception exception) when (!context.RequestAborted.IsCancellationRequested)
+        catch (Exception exception)
         {
             Logger.LogError(exception, "Could not load biology test reports.");
             message = "Роботи учнів тимчасово недоступні.";
         }
+    }
+
+    private async Task OnFileSelectedAsync(InputFileChangeEventArgs e)
+    {
+        if (!canViewReports)
+        {
+            return;
+        }
+
+        uploadError = null;
+        uploadSuccess = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 2_000_000);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+            var model = TestDefinitionParser.Parse(json);
+            var saved = await TestStore.SaveAsync(model, json);
+            uploadSuccess = $"Тест \"{saved.Title}\" завантажено й активовано для {saved.Grade} класу.";
+            uploadedTests = await TestStore.ListAsync();
+        }
+        catch (TestDefinitionValidationException validation)
+        {
+            uploadError = validation.Errors;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not import a test definition.");
+            uploadError = ["Не вдалося завантажити файл. Перевір, що це коректний JSON."];
+        }
+    }
+
+    private async Task ActivateAsync(Guid id)
+    {
+        if (!canViewReports)
+        {
+            return;
+        }
+
+        await TestStore.ActivateAsync(id);
+        uploadedTests = await TestStore.ListAsync();
     }
 
     private static string ListUrl(int page) => page <= 1 ? "teacher" : $"teacher?page={page}";

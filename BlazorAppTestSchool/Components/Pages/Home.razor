@@ -1,8 +1,10 @@
 @page "/"
 @layout BiologyLayout
 @rendermode InteractiveServer
+@using BlazorAppTestSchool.Data.Testing
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @inject ProtectedSessionStorage ProfileStorage
+@inject TestDefinitionStore TestStore
 
 <PageTitle>Контрольна з біології | 7 клас</PageTitle>
 
@@ -45,17 +47,21 @@ else
             <button type="button" class="btn btn-outline-secondary btn-sm"
                     @onclick="ChangeProfileAsync" disabled="@savingProfile">Змінити профіль</button>
         </div>
-        @if (participant.Grade == 11)
+        @if (!testCheckDone)
         {
-            <h1 id="test-heading">Контрольна для 11 класу</h1>
+            <p role="status">Перевіряємо наявність контрольної…</p>
+        }
+        else if (!hasActiveTest)
+        {
+            <h1 id="test-heading">Контрольна для @participant.Grade класу</h1>
             <p class="mb-0">Завдання ще готуються.</p>
         }
         else
         {
-            <p class="school-lab-subject">Біологія · 7 клас</p>
+            <p class="school-lab-subject">Біологія · @participant.Grade клас</p>
             <h1 id="test-heading" class="mb-3">Вітаємо на контрольній з біології!</h1>
             <p class="mb-4">
-                На тебе чекають 12 завдань по 1 балу, і на кожне буде від 1 до 3 хвилин залежно від його типу.
+                На тебе чекає кілька завдань різних типів, і на кожне буде від 1 до 3 хвилин залежно від його типу.
                 Працюй самостійно, без копіювання завдань, вставлення готових відповідей і допомоги ChatGPT чи інших сервісів ШІ.
             </p>
 
@@ -77,7 +83,7 @@ else
                         <td class="text-nowrap">1 хв 30 с</td>
                     </tr>
                     <tr>
-                        <th scope="row" class="fw-normal">Відповідність, послідовність або аналіз зображення</th>
+                        <th scope="row" class="fw-normal">Відповідність, послідовність або перетягування на картинці</th>
                         <td class="text-nowrap">2 хв</td>
                     </tr>
                     <tr>
@@ -97,6 +103,8 @@ else
 
 @code {
     private BiologyProfile? profile;
+    private bool testCheckDone;
+    private bool hasActiveTest;
     private string lastName = string.Empty;
     private string firstName = string.Empty;
     private string patronymic = string.Empty;
@@ -115,6 +123,19 @@ else
         var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
         profile = saved.Value is { IsValid: true } ? saved.Value : null;
         profileReady = true;
+        StateHasChanged();
+
+        if (profile is { } participant)
+        {
+            await CheckActiveTestAsync(participant);
+        }
+    }
+
+    private async Task CheckActiveTestAsync(BiologyProfile participant)
+    {
+        testCheckDone = false;
+        hasActiveTest = await TestStore.GetActiveAsync(BiologySeed.Subject, participant.Grade) is not null;
+        testCheckDone = true;
         StateHasChanged();
     }
 
@@ -143,6 +164,8 @@ else
         {
             savingProfile = false;
         }
+
+        await CheckActiveTestAsync(candidate);
     }
 
     private async Task ChangeProfileAsync()

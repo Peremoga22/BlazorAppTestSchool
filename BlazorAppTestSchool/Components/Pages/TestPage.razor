@@ -1,0 +1,57 @@
+@page "/biology-test"
+@layout BiologyLayout
+@rendermode InteractiveServer
+@using BlazorAppTestSchool.Data.Testing
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage ProfileStorage
+@inject TestDefinitionStore TestStore
+@inject NavigationManager Navigation
+
+@if (profile is not { } participant)
+{
+    <p role="status">Завантажуємо профіль…</p>
+}
+else if (!testReady)
+{
+    <p role="status">Завантажуємо контрольну…</p>
+}
+else if (test is null)
+{
+    <section class="school-lab" aria-labelledby="no-test-heading">
+        <h1 id="no-test-heading">Тест ще не готовий</h1>
+        <p>Учитель ще не завантажив контрольну для @participant.Grade класу. Спробуй пізніше.</p>
+        <a class="btn btn-outline-secondary" href="">На головну</a>
+    </section>
+}
+else
+{
+    <TestRunner Test="test" Participant="participant" />
+}
+
+@code {
+    private BiologyProfile? profile;
+    private TestDefinitionModel? test;
+    private bool testReady;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
+        if (saved.Value is not { IsValid: true } participant)
+        {
+            Navigation.NavigateTo("", replace: true);
+            return;
+        }
+
+        profile = participant;
+        StateHasChanged();
+
+        test = await TestStore.GetActiveAsync(BiologySeed.Subject, participant.Grade);
+        testReady = true;
+        StateHasChanged();
+    }
+}

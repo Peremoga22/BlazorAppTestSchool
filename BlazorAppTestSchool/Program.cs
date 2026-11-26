@@ -1,6 +1,7 @@
 using BlazorAppTestSchool.Components;
 using BlazorAppTestSchool.Components.Account;
 using BlazorAppTestSchool.Data;
+using BlazorAppTestSchool.Data.Testing;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddSingleton<BiologyAttemptStore>();
+builder.Services.AddSingleton<TestDefinitionStore>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
@@ -40,6 +42,20 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 var app = builder.Build();
+
+try
+{
+    var testStore = app.Services.GetRequiredService<TestDefinitionStore>();
+    if (!await testStore.HasAnyAsync())
+    {
+        var seed = BiologySeed.CreateGrade7();
+        await testStore.SaveAsync(seed, TestDefinitionParser.ToJson(seed));
+    }
+}
+catch (Exception exception)
+{
+    app.Logger.LogWarning(exception, "Could not seed the default biology test. Apply database migrations first.");
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

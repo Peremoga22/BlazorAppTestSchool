@@ -1,0 +1,587 @@
+@implements IAsyncDisposable
+@using BlazorAppTestSchool.Data
+@using BlazorAppTestSchool.Data.Testing
+@inject BiologyAttemptStore AttemptStore
+@inject ILogger<TestRunner> Logger
+@inject IJSRuntime JS
+@using static BlazorAppTestSchool.Data.BiologyAttemptReport
+
+<p class="school-lab-subject biology-test-label">@Test.Subject · @(Test.Grade is { } grade ? $"{grade} клас" : null) · @(Participant?.Name ?? "Перегляд учителя")</p>
+
+@if (questionIndex == Questions.Length)
+{
+    <section class="school-lab test-result @(score == Questions.Length ? "test-result-perfect" : null)" aria-labelledby="result-heading">
+        <h2 id="result-heading">Тест завершено</h2>
+        @if (explanation is not null)
+        {
+            <p>Попередній результат: <strong class="school-lab-score">@score із @Questions.Length балів</strong>. За пояснення можна отримати ще 1 бал після перевірки вчителем.</p>
+            <details class="mb-3">
+                <summary>Твоє пояснення</summary>
+                <p class="mt-2" style="white-space: pre-wrap">@explanation</p>
+            </details>
+        }
+        else
+        {
+            <p>Твій результат: <strong class="school-lab-score">@score із @Questions.Length балів</strong>.</p>
+        }
+        <p>Загальний час: <strong>@FormatDuration(attemptDuration)</strong>.</p>
+        <details class="mb-3">
+            <summary>Час на кожне питання</summary>
+            <ol class="mt-2">
+                @foreach (var result in questionResults)
+                {
+                    <li>@FormatDuration(result.Duration)</li>
+                }
+            </ol>
+        </details>
+        @if (Participant is not null)
+        {
+            @if (reportSaved)
+            {
+                <p>Роботу здано. Вчитель може переглянути результат у списку робіт.</p>
+            }
+            else if (savingReport)
+            {
+                <p role="status">Зберігаємо роботу…</p>
+            }
+            else if (saveFailed)
+            {
+                <p class="text-danger" role="alert">Роботу не вдалося зберегти.</p>
+                <button class="btn btn-primary mb-3" @onclick="SaveReportAsync">Спробувати ще раз</button>
+            }
+        }
+        <a class="btn btn-outline-secondary" href="@(Participant is null ? "teacher" : "")">@(Participant is null ? "До сторінки вчителя" : "Повернутися до правил")</a>
+    </section>
+}
+else
+{
+    var question = Questions[questionIndex];
+    var displayedIndex = questionIndex;
+    var progress = (int)Math.Round(100.0 * displayedIndex / Questions.Length);
+
+    <section @key="displayedIndex" class="school-lab test-question" aria-labelledby="question-heading">
+        <div class="test-progress" role="progressbar" aria-valuenow="@progress" aria-valuemin="0" aria-valuemax="100">
+            <div class="test-progress-bar" style="width:@(progress)%"></div>
+        </div>
+        <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+            <span>Питання @(displayedIndex + 1) з @Questions.Length</span>
+            <span class="school-lab-timer @(secondsLeft <= 15 ? "school-lab-timer-low" : null)" role="timer">Залишилось @secondsLeft с</span>
+        </div>
+
+        <h2 id="question-heading" class="h4" tabindex="-1" @ref="questionHeading"
+            @oncopy:preventDefault>@question.Text</h2>
+
+        @if (question.Image is not null && question.Type != QuestionType.DiagramLabel)
+        {
+            <figure class="my-2">
+                <img class="school-lab-root-diagram" src="@question.Image.Src" alt="@question.Image.Alt" />
+                @if (question.Image.Caption is { } caption)
+                {
+                    <figcaption>@caption</figcaption>
+                }
+            </figure>
+        }
+
+        <fieldset class="my-3" aria-labelledby="question-heading" @oncopy:preventDefault>
+            @if (question.Type is QuestionType.Blank or QuestionType.Explanation)
+            {
+                <label class="form-label" for="written-answer">Твоя відповідь</label>
+                <textarea id="written-answer" class="form-control" rows="@(question.Type == QuestionType.Blank ? 1 : 4)"
+                          maxlength="1000" value="@writtenAnswer" @onpaste:preventDefault
+                          @oninput="e => UpdateText(displayedIndex, e.Value?.ToString() ?? string.Empty)"></textarea>
+            }
+            else if (question.Type is QuestionType.Match or QuestionType.Order)
+            {
+                <p class="test-dnd-hint">Перетягни варіанти на потрібні місця (або вибери клавіатурою нижче).</p>
+                <div class="dnd-area" @ref="dragContainer">
+                    <div class="dnd-slots">
+                        @for (var slot = 0; slot < slotPlacements.Length; slot++)
+                        {
+                            var slotIndex = slot;
+                            <div class="dnd-slot" data-dnd-zone="slot-@slotIndex">
+                                <span class="dnd-slot-label">@SlotLabel(question, slotIndex)</span>
+                                @if (slotPlacements[slotIndex] is int placed)
+                                {
+                                    <span class="dnd-chip dnd-chip-placed" data-dnd-item="opt-@placed">@question.Options![placed]</span>
+                                }
+                                else
+                                {
+                                    <span class="dnd-slot-placeholder" aria-hidden="true">Перетягни сюди</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="dnd-bank" data-dnd-zone="bank">
+                        @for (var i = 0; i < question.Options!.Length; i++)
+                        {
+                            var optionIndex = i;
+                            @if (!IsPlaced(optionIndex))
+                            {
+                                <span class="dnd-chip" data-dnd-item="opt-@optionIndex" @key="optionIndex">@question.Options[optionIndex]</span>
+                            }
+                        }
+                    </div>
+                </div>
+                <div class="visually-hidden-focusable test-dnd-fallback">
+                    @for (var slot = 0; slot < slotPlacements.Length; slot++)
+                    {
+                        var slotIndex = slot;
+                        var selectId = $"slot-select-{slotIndex}";
+                        <label class="form-label mt-2" for="@selectId">@SlotLabel(question, slotIndex)</label>
+                        <select id="@selectId" class="form-select" value="@slotPlacements[slotIndex]"
+                                @onchange="e => SetSlot(slotIndex, e.Value?.ToString())">
+                            <option value="-1">Обери відповідь</option>
+                            @for (var option = 0; option < question.Options!.Length; option++)
+                            {
+                                <option value="@option">@question.Options[option]</option>
+                            }
+                        </select>
+                    }
+                </div>
+            }
+            else if (question.Type == QuestionType.DiagramLabel)
+            {
+                <p class="test-dnd-hint">Перетягни підписи на картинку (або вибери клавіатурою нижче).</p>
+                <div class="dnd-area dnd-area-diagram" @ref="dragContainer">
+                    <div class="dnd-diagram-wrap">
+                        <img class="dnd-diagram-image" src="@question.Image!.Src" alt="@question.Image.Alt" />
+                        @for (var h = 0; h < question.Hotspots!.Length; h++)
+                        {
+                            var hotspotIndex = h;
+                            var hotspot = question.Hotspots[hotspotIndex];
+                            <div class="dnd-hotspot" style="left:@(hotspot.X.ToString(System.Globalization.CultureInfo.InvariantCulture))%; top:@(hotspot.Y.ToString(System.Globalization.CultureInfo.InvariantCulture))%;"
+                                 data-dnd-zone="slot-@hotspotIndex">
+                                @if (slotPlacements[hotspotIndex] is int placed)
+                                {
+                                    <span class="dnd-chip dnd-chip-placed" data-dnd-item="opt-@placed">@question.Options![placed]</span>
+                                }
+                                else
+                                {
+                                    <span class="dnd-hotspot-marker" aria-hidden="true"></span>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="dnd-bank" data-dnd-zone="bank">
+                        @for (var i = 0; i < question.Options!.Length; i++)
+                        {
+                            var optionIndex = i;
+                            @if (!IsPlaced(optionIndex))
+                            {
+                                <span class="dnd-chip" data-dnd-item="opt-@optionIndex" @key="optionIndex">@question.Options[optionIndex]</span>
+                            }
+                        }
+                    </div>
+                </div>
+                <div class="visually-hidden-focusable test-dnd-fallback">
+                    @for (var h = 0; h < question.Hotspots!.Length; h++)
+                    {
+                        var hotspotIndex = h;
+                        var selectId = $"hotspot-select-{hotspotIndex}";
+                        <label class="form-label mt-2" for="@selectId">Позначка @(hotspotIndex + 1)</label>
+                        <select id="@selectId" class="form-select" value="@slotPlacements[hotspotIndex]"
+                                @onchange="e => SetSlot(hotspotIndex, e.Value?.ToString())">
+                            <option value="-1">Обери відповідь</option>
+                            @for (var option = 0; option < question.Options!.Length; option++)
+                            {
+                                <option value="@option">@question.Options[option]</option>
+                            }
+                        </select>
+                    }
+                </div>
+            }
+            else
+            {
+                @if (question.Type == QuestionType.Multiple)
+                {
+                    <p>Познач усі правильні відповіді.</p>
+                }
+
+                @for (var i = 0; i < question.Options!.Length; i++)
+                {
+                    var optionIndex = i;
+                    var optionId = $"question-{displayedIndex}-option-{optionIndex}";
+                    <div class="form-check test-option mb-2" @key="optionId">
+                        <input class="form-check-input" type="@(question.Type == QuestionType.Multiple ? "checkbox" : "radio")"
+                               id="@optionId" name="@($"question-{displayedIndex}")"
+                               checked="@selectedOptions.Contains(optionIndex)"
+                               @onchange="e => SelectOption(displayedIndex, optionIndex, e.Value is true)" />
+                        <label class="form-check-label" for="@optionId">@question.Options[optionIndex]</label>
+                    </div>
+                }
+            }
+        </fieldset>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" disabled="@(!HasAnswer(question))"
+                    @onclick="() => AdvanceAsync(displayedIndex)">
+                @(displayedIndex == Questions.Length - 1 ? "Завершити тест" : "Наступне питання")
+            </button>
+            <button class="btn btn-outline-secondary" @onclick="() => AdvanceAsync(displayedIndex, skip: true)">
+                Пропустити
+            </button>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public required TestDefinitionModel Test { get; set; }
+    [Parameter] public BiologyProfile? Participant { get; set; }
+
+    private TestQuestion[] Questions => Test.Questions;
+
+    private readonly CancellationTokenSource timerCancellation = new();
+    private ElementReference questionHeading;
+    private ElementReference dragContainer;
+    private long questionStartedAt;
+    private int questionIndex;
+    private readonly HashSet<int> selectedOptions = [];
+    private int?[] slotPlacements = [];
+    private string writtenAnswer = string.Empty;
+    private string? explanation;
+    private int score;
+    private readonly List<BiologyQuestionResult> questionResults = [];
+    private readonly Guid attemptId = Guid.NewGuid();
+    private bool savingReport;
+    private bool reportSaved;
+    private bool saveFailed;
+    private TimeSpan attemptDuration;
+    private int secondsLeft;
+    private bool focusQuestion;
+
+    private DotNetObjectReference<TestRunner>? dotNetRef;
+    private IJSObjectReference? dragModule;
+    private IJSObjectReference? dragHandle;
+    private int? dragInitializedForQuestion;
+
+    protected override void OnInitialized()
+    {
+        dotNetRef = DotNetObjectReference.Create(this);
+        secondsLeft = Questions[0].EffectiveSeconds;
+        slotPlacements = new int?[SlotCount(Questions[0])];
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            questionStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+            dragModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/drag-drop.js");
+            _ = RunTimerAsync(timerCancellation.Token);
+        }
+
+        if (focusQuestion)
+        {
+            focusQuestion = false;
+            await questionHeading.FocusAsync();
+        }
+
+        if (questionIndex < Questions.Length && RequiresDrag(Questions[questionIndex].Type) &&
+            dragInitializedForQuestion != questionIndex && dragModule is not null)
+        {
+            if (dragHandle is not null)
+            {
+                await dragHandle.InvokeVoidAsync("dispose");
+                await dragHandle.DisposeAsync();
+            }
+
+            dragHandle = await dragModule.InvokeAsync<IJSObjectReference>("init", dragContainer, dotNetRef);
+            dragInitializedForQuestion = questionIndex;
+        }
+    }
+
+    private async Task RunTimerAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(async () =>
+                {
+                    if (questionIndex == Questions.Length)
+                    {
+                        return;
+                    }
+
+                    secondsLeft = GetSecondsLeft();
+                    if (secondsLeft == 0)
+                    {
+                        await AdvanceAsync(questionIndex);
+                    }
+
+                    StateHasChanged();
+                });
+
+                if (questionIndex == Questions.Length)
+                {
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private int GetSecondsLeft()
+    {
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(questionStartedAt).TotalSeconds;
+        return Math.Max(0, (int)Math.Ceiling(Questions[questionIndex].EffectiveSeconds - elapsed));
+    }
+
+    private bool CanAnswer(int index) =>
+        index == questionIndex && index < Questions.Length && GetSecondsLeft() > 0;
+
+    private static int SlotCount(TestQuestion question) => question.Type switch
+    {
+        QuestionType.Match => question.Labels!.Length,
+        QuestionType.Order => question.Options!.Length,
+        QuestionType.DiagramLabel => question.Hotspots!.Length,
+        _ => 0
+    };
+
+    private static bool RequiresDrag(QuestionType type) =>
+        type is QuestionType.Match or QuestionType.Order or QuestionType.DiagramLabel;
+
+    private static string SlotLabel(TestQuestion question, int slotIndex) => question.Type switch
+    {
+        QuestionType.Match => question.Labels![slotIndex],
+        QuestionType.Order => $"Крок {slotIndex + 1}",
+        _ => $"Позначка {slotIndex + 1}"
+    };
+
+    private bool IsPlaced(int optionIndex) => slotPlacements.Contains(optionIndex);
+
+    private bool HasAnswer(TestQuestion question) => question.Type switch
+    {
+        QuestionType.Blank or QuestionType.Explanation => !string.IsNullOrWhiteSpace(writtenAnswer),
+        QuestionType.Match or QuestionType.Order or QuestionType.DiagramLabel => slotPlacements.All(slot => slot.HasValue),
+        _ => selectedOptions.Count > 0
+    };
+
+    private void UpdateText(int index, string value)
+    {
+        if (CanAnswer(index))
+        {
+            writtenAnswer = value.Length <= 1000 ? value : value[..1000];
+        }
+    }
+
+    private void SetSlot(int slotIndex, string? value)
+    {
+        if (!CanAnswer(questionIndex) || !int.TryParse(value, out var option) || option < -1)
+        {
+            return;
+        }
+
+        if (option >= 0)
+        {
+            for (var i = 0; i < slotPlacements.Length; i++)
+            {
+                if (slotPlacements[i] == option)
+                {
+                    slotPlacements[i] = null;
+                }
+            }
+        }
+
+        slotPlacements[slotIndex] = option >= 0 ? option : null;
+    }
+
+    [JSInvokable]
+    public Task OnDrop(string itemId, string? zoneId)
+    {
+        if (!CanAnswer(questionIndex) || !itemId.StartsWith("opt-") || !int.TryParse(itemId[4..], out var optionIndex))
+        {
+            return Task.CompletedTask;
+        }
+
+        for (var i = 0; i < slotPlacements.Length; i++)
+        {
+            if (slotPlacements[i] == optionIndex)
+            {
+                slotPlacements[i] = null;
+            }
+        }
+
+        if (zoneId is not null && zoneId.StartsWith("slot-") &&
+            int.TryParse(zoneId[5..], out var slotIndex) && slotIndex >= 0 && slotIndex < slotPlacements.Length)
+        {
+            slotPlacements[slotIndex] = optionIndex;
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void SelectOption(int index, int option, bool isChecked)
+    {
+        if (!CanAnswer(index))
+        {
+            return;
+        }
+
+        if (Questions[index].Type != QuestionType.Multiple)
+        {
+            selectedOptions.Clear();
+            selectedOptions.Add(option);
+        }
+        else if (isChecked)
+        {
+            selectedOptions.Add(option);
+        }
+        else
+        {
+            selectedOptions.Remove(option);
+        }
+    }
+
+    private async Task AdvanceAsync(int displayedIndex, bool skip = false)
+    {
+        if (displayedIndex != questionIndex || questionIndex == Questions.Length)
+        {
+            return;
+        }
+
+        var question = Questions[questionIndex];
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(questionStartedAt, now);
+        var limit = TimeSpan.FromSeconds(question.EffectiveSeconds);
+        var timeExpired = elapsed >= limit;
+        var duration = timeExpired ? limit : elapsed;
+        var answer = skip && !timeExpired ? null : GetAnswerText(question);
+        int? points = 0;
+
+        if (answer is not null)
+        {
+            if (question.Type == QuestionType.Explanation)
+            {
+                explanation = answer;
+                points = null;
+            }
+            else if (IsCorrect(question))
+            {
+                points = 1;
+                score++;
+            }
+        }
+
+        questionResults.Add(new BiologyQuestionResult(question.Text, answer, points, duration, timeExpired)
+        {
+            HasRootDiagram = question.Image?.Src == "root-tip.png"
+        });
+        attemptDuration += elapsed;
+
+        questionIndex++;
+        selectedOptions.Clear();
+        writtenAnswer = string.Empty;
+        if (questionIndex < Questions.Length)
+        {
+            var next = Questions[questionIndex];
+            slotPlacements = new int?[SlotCount(next)];
+            questionStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+            secondsLeft = next.EffectiveSeconds;
+            focusQuestion = true;
+        }
+        else
+        {
+            await SaveReportAsync();
+        }
+    }
+
+    private bool IsCorrect(TestQuestion question) => question.Type switch
+    {
+        QuestionType.Blank => string.Equals(writtenAnswer.Trim().TrimEnd('.'), question.BlankAnswer, StringComparison.OrdinalIgnoreCase),
+        QuestionType.Match => slotPlacements.Select(slot => slot ?? -1).SequenceEqual(question.MatchKey!),
+        QuestionType.Order => slotPlacements.Select(slot => slot ?? -1).SequenceEqual(question.OrderKey!),
+        QuestionType.DiagramLabel => Enumerable.Range(0, question.Hotspots!.Length)
+            .All(h => slotPlacements[h] is int placed && question.Options![placed] == question.Hotspots[h].Label),
+        _ => selectedOptions.SetEquals(question.AnswerKey!)
+    };
+
+    private string? GetAnswerText(TestQuestion question)
+    {
+        if (question.Type is QuestionType.Blank or QuestionType.Explanation)
+        {
+            return string.IsNullOrWhiteSpace(writtenAnswer) ? null : writtenAnswer.Trim();
+        }
+
+        if (question.Type is QuestionType.Match or QuestionType.Order or QuestionType.DiagramLabel)
+        {
+            var choices = slotPlacements.Select((option, slot) => (Option: option, Slot: slot))
+                .Where(choice => choice.Option is not null)
+                .Select(choice => $"{SlotLabel(question, choice.Slot)}: {question.Options![choice.Option!.Value]}")
+                .ToArray();
+            return choices.Length == 0 ? null : string.Join(Environment.NewLine, choices);
+        }
+
+        return selectedOptions.Count == 0
+            ? null
+            : string.Join(", ", selectedOptions.Order().Select(option => question.Options![option]));
+    }
+
+    private async Task SaveReportAsync()
+    {
+        if (Participant is not { } participant || savingReport || reportSaved)
+        {
+            return;
+        }
+
+        savingReport = true;
+        saveFailed = false;
+        try
+        {
+            var report = new BiologyAttemptReport(participant.Name, participant.Grade, score,
+                attemptDuration, questionResults.ToArray())
+            {
+                LastName = participant.LastName,
+                FirstName = participant.FirstName,
+                Patronymic = participant.Patronymic
+            };
+            await AttemptStore.SaveAsync(attemptId, report);
+            reportSaved = true;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not save a test report.");
+            saveFailed = true;
+        }
+        finally
+        {
+            savingReport = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        timerCancellation.Cancel();
+        timerCancellation.Dispose();
+
+        if (dragHandle is not null)
+        {
+            try
+            {
+                await dragHandle.InvokeVoidAsync("dispose");
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+
+            await dragHandle.DisposeAsync();
+        }
+
+        if (dragModule is not null)
+        {
+            try
+            {
+                await dragModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        dotNetRef?.Dispose();
+    }
+}

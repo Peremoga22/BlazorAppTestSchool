@@ -57,6 +57,27 @@ app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
+app.MapGet("/teacher/reports/{attemptId:guid}/word", async Task<IResult> (
+    Guid attemptId, HttpContext context, IWebHostEnvironment environment, BiologyAttemptStore attempts) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    if (!TeacherReportAccess.CanView(environment, context))
+    {
+        return Results.NotFound();
+    }
+
+    var report = await attempts.FindAsync(attemptId, context.RequestAborted);
+    if (report is null)
+    {
+        return Results.NotFound();
+    }
+
+    var diagram = environment.WebRootFileProvider.GetFileInfo("root-tip.png");
+    var document = BiologyAttemptWordDocument.Create(report, diagram);
+    return Results.File(document, BiologyAttemptWordDocument.ContentType,
+        $"Контрольна з біології {report.Grade} клас {attemptId.ToString("N")[..8]}.docx");
+});
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

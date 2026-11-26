@@ -1,14 +1,14 @@
 @page "/teacher"
 @layout BiologyLayout
-@rendermode InteractiveServer
 @using BlazorAppTestSchool.Data
 @using static BlazorAppTestSchool.Data.BiologyAttemptReport
 @inject BiologyAttemptStore AttemptStore
+@inject IWebHostEnvironment Environment
 @inject ILogger<Teacher> Logger
 
 @if (Preview)
 {
-    <BiologyTest />
+    <BiologyTest @rendermode="InteractiveServer" />
 }
 else
 {
@@ -19,25 +19,24 @@ else
         <p>Біологія · 7 клас · 12 завдань</p>
         <a class="btn btn-outline-secondary mb-4" href="teacher?preview=true">Переглянути контрольну</a>
 
-        <h2 class="h4">Результат учня</h2>
-        <form class="biology-profile-form mt-3" @onsubmit="OpenReportAsync" @onsubmit:preventDefault>
-            <label class="form-label" for="report-code">Код від учня</label>
-            <input class="form-control mb-2" id="report-code" @bind="reportCode" required
-                   maxlength="64" autocomplete="off" spellcheck="false" />
-            <button class="btn btn-primary" disabled="@loading">Відкрити роботу</button>
-        </form>
-
-        @if (loading)
+        @if (!canViewReports)
         {
-            <p class="mt-3" role="status">Шукаємо роботу…</p>
+            <p>Роботи учнів доступні в локальному режимі розробки.</p>
         }
         else if (message is not null)
         {
-            <p class="mt-3 text-danger" role="alert">@message</p>
+            <p class="text-danger" role="alert">@message</p>
+            <a href="@ListUrl(CurrentPage)">До списку робіт</a>
         }
         else if (report is { } result)
         {
-            <section class="mt-4" aria-labelledby="report-heading" aria-live="polite">
+            <section aria-labelledby="report-heading">
+                <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
+                    <a href="@ListUrl(CurrentPage)">До списку робіт</a>
+                    <a class="btn btn-primary" href="@($"teacher/reports/{Attempt}/word")" data-enhance-nav="false">
+                        Завантажити Word
+                    </a>
+                </div>
                 <h2 id="report-heading" class="h4">@result.StudentName · @result.Grade клас</h2>
                 @if (result.Questions.Any(question => question.Points is null))
                 {
@@ -71,50 +70,118 @@ else
                 </ol>
             </section>
         }
+        else
+        {
+            <h2 class="h4">Роботи учнів</h2>
+            @if (attempts.Length == 0)
+            {
+                <p>На цій сторінці ще немає зданих робіт.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th scope="col">Учень</th>
+                                <th scope="col">Клас</th>
+                                <th scope="col">Оцінка</th>
+                                <th scope="col">Час</th>
+                                <th scope="col">Здано</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in attempts)
+                            {
+                                <tr>
+                                    <th scope="row"><a href="@ReportUrl(item.Id)">@item.StudentName</a></th>
+                                    <td>@item.Grade</td>
+                                    <td>
+                                        @item.Score з @item.MaxScore
+                                        @if (item.PendingReview)
+                                        {
+                                            <span class="d-block small">Попередня</span>
+                                        }
+                                    </td>
+                                    <td>@FormatDuration(item.Duration)</td>
+                                    <td>@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (CurrentPage > 1 || hasMore)
+            {
+                <nav class="d-flex gap-3" aria-label="Сторінки робіт">
+                    @if (CurrentPage > 1)
+                    {
+                        <a href="@ListUrl(CurrentPage - 1)">Попередня сторінка</a>
+                    }
+                    @if (hasMore)
+                    {
+                        <a href="@ListUrl(CurrentPage + 1)">Наступна сторінка</a>
+                    }
+                </nav>
+            }
+        }
     </section>
 }
 
 @code {
-    [SupplyParameterFromQuery]
-    private bool Preview { get; set; }
+    [SupplyParameterFromQuery] private bool Preview { get; set; }
+    [SupplyParameterFromQuery(Name = "attempt")] private string? Attempt { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] private string? PageNumber { get; set; }
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
 
-    private string reportCode = string.Empty;
     private BiologyAttemptReport? report;
+    private BiologyAttemptSummary[] attempts = [];
     private string? message;
-    private bool loading;
+    private bool canViewReports;
+    private bool hasMore;
+    private int CurrentPage => int.TryParse(PageNumber, out var page) && page is > 0 and <= int.MaxValue / BiologyAttemptStore.PageSize ? page : 1;
 
-    private async Task OpenReportAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        if (loading)
+        if (Preview)
         {
             return;
         }
 
-        report = null;
-        message = null;
-        if (!Guid.TryParse(reportCode.Trim(), out var code))
+        if (HttpContext is { } requestContext)
         {
-            message = "Введи код, який отримав учень після тесту.";
+            requestContext.Response.Headers.CacheControl = "no-store";
+        }
+
+        canViewReports = TeacherReportAccess.CanView(Environment, HttpContext);
+        if (!canViewReports || HttpContext is not { } context)
+        {
             return;
         }
 
-        loading = true;
         try
         {
-            report = await AttemptStore.FindAsync(code);
+            if (Attempt is null)
+            {
+                (attempts, hasMore) = await AttemptStore.ListAsync(CurrentPage, context.RequestAborted);
+                return;
+            }
+
+            report = Guid.TryParse(Attempt, out var attemptId)
+                ? await AttemptStore.FindAsync(attemptId, context.RequestAborted)
+                : null;
             if (report is null)
             {
-                message = "Роботу за цим кодом не знайдено.";
+                message = "Роботу не знайдено.";
             }
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!context.RequestAborted.IsCancellationRequested)
         {
-            Logger.LogError(exception, "Could not load a biology test report.");
-            message = "Роботу не вдалося відкрити. Спробуй ще раз.";
-        }
-        finally
-        {
-            loading = false;
+            Logger.LogError(exception, "Could not load biology test reports.");
+            message = "Роботи учнів тимчасово недоступні.";
         }
     }
+
+    private static string ListUrl(int page) => page <= 1 ? "teacher" : $"teacher?page={page}";
+    private string ReportUrl(Guid attemptId) => $"teacher?attempt={attemptId:N}&page={CurrentPage}";
 }

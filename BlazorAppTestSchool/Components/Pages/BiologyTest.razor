@@ -38,8 +38,7 @@
         {
             @if (reportSaved)
             {
-                <p>Код для вчителя: <strong class="text-break">@reportCode.ToString("N")</strong></p>
-                <p>Передай цей код учителю, щоб він міг відкрити твою роботу.</p>
+                <p>Роботу здано. Вчитель може переглянути результат у списку робіт.</p>
             }
             else if (savingReport)
             {
@@ -175,7 +174,7 @@ else
     private string? explanation;
     private int score;
     private readonly List<BiologyQuestionResult> questionResults = [];
-    private readonly Guid reportCode = Guid.NewGuid();
+    private readonly Guid attemptId = Guid.NewGuid();
     private bool savingReport;
     private bool reportSaved;
     private bool saveFailed;
@@ -321,7 +320,10 @@ else
             }
         }
 
-        questionResults.Add(new BiologyQuestionResult(question.Text, answer, points, duration, timeExpired));
+        questionResults.Add(new BiologyQuestionResult(question.Text, answer, points, duration, timeExpired)
+        {
+            HasRootDiagram = question.Kind == Format.Diagram
+        });
         attemptDuration += elapsed;
 
         questionIndex++;
@@ -375,8 +377,13 @@ else
         try
         {
             var report = new BiologyAttemptReport(participant.Name, participant.Grade, score,
-                attemptDuration, questionResults.ToArray());
-            await AttemptStore.SaveAsync(reportCode, report);
+                attemptDuration, questionResults.ToArray())
+            {
+                LastName = participant.LastName,
+                FirstName = participant.FirstName,
+                Patronymic = participant.Patronymic
+            };
+            await AttemptStore.SaveAsync(attemptId, report);
             reportSaved = true;
         }
         catch (Exception exception)

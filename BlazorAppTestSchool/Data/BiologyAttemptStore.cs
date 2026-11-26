@@ -5,33 +5,66 @@ namespace BlazorAppTestSchool.Data;
 
 public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
 {
-    public async Task SaveAsync(Guid code, BiologyAttemptReport report)
+    public const int PageSize = 25;
+
+    public async Task SaveAsync(Guid attemptId, BiologyAttemptReport report)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        if (await database.BiologyAttempts.AnyAsync(attempt => attempt.Id == code))
+        if (await database.BiologyAttempts.AnyAsync(attempt => attempt.Id == attemptId))
         {
             return;
         }
 
         database.BiologyAttempts.Add(new BiologyAttempt
         {
-            Id = code,
+            Id = attemptId,
+            SubmittedAt = DateTimeOffset.UtcNow,
             ReportJson = JsonSerializer.Serialize(report)
         });
         await database.SaveChangesAsync();
     }
 
-    public async Task<BiologyAttemptReport?> FindAsync(Guid code)
+    public async Task<(BiologyAttemptSummary[] Attempts, bool HasMore)> ListAsync(int page, CancellationToken cancellationToken)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var attempts = await database.BiologyAttempts.AsNoTracking()
+            .OrderByDescending(attempt => attempt.SubmittedAt)
+            .ThenByDescending(attempt => attempt.Id)
+            .Skip((page - 1) * PageSize)
+            .Take(PageSize + 1)
+            .ToArrayAsync(cancellationToken);
+
+        var summaries = attempts.Take(PageSize).Select(attempt =>
+        {
+            var report = ReadReport(attempt.ReportJson);
+            return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, report.StudentName,
+                report.Grade, report.Score, report.Questions.Length,
+                report.Questions.Any(question => question.Points is null), report.Duration);
+        }).ToArray();
+
+        return (summaries, attempts.Length > PageSize);
+    }
+
+    public async Task<BiologyAttemptReport?> FindAsync(Guid attemptId, CancellationToken cancellationToken = default)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var reportJson = await database.BiologyAttempts
-            .Where(attempt => attempt.Id == code)
+            .Where(attempt => attempt.Id == attemptId)
             .Select(attempt => attempt.ReportJson)
-            .SingleOrDefaultAsync();
+            .SingleOrDefaultAsync(cancellationToken);
 
-        return reportJson is null ? null : JsonSerializer.Deserialize<BiologyAttemptReport>(reportJson);
+        return reportJson is null ? null : ReadReport(reportJson);
     }
+
+    private static BiologyAttemptReport ReadReport(string json) =>
+        JsonSerializer.Deserialize<BiologyAttemptReport>(json)
+        ?? throw new InvalidDataException("The attempt report is empty.");
 }
+
+public sealed record BiologyAttemptSummary(
+    Guid Id, DateTimeOffset? SubmittedAt, string StudentName, int Grade,
+    int Score, int MaxScore, bool PendingReview, TimeSpan Duration);

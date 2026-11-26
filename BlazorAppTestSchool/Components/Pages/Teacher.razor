@@ -1,12 +1,14 @@
 @page "/teacher"
 @layout BiologyLayout
 @rendermode InteractiveServer
+@attribute [Authorize(Roles = ApplicationRoles.Teacher + "," + ApplicationRoles.Admin)]
 @using BlazorAppTestSchool.Data
 @using BlazorAppTestSchool.Data.Testing
+@using Microsoft.AspNetCore.Authorization
 @using static BlazorAppTestSchool.Data.BiologyAttemptReport
 @inject BiologyAttemptStore AttemptStore
 @inject TestDefinitionStore TestStore
-@inject IWebHostEnvironment Environment
+@inject TestImageStore ImageStore
 @inject ILogger<Teacher> Logger
 
 @if (Preview)
@@ -31,11 +33,7 @@ else
     <section class="school-lab" aria-labelledby="teacher-heading">
         <h1 id="teacher-heading">Сторінка вчителя</h1>
 
-        @if (!canViewReports)
-        {
-            <p>Роботи учнів і завантаження тестів доступні в локальному режимі розробки.</p>
-        }
-        else if (message is not null)
+        @if (message is not null)
         {
             <p class="text-danger" role="alert">@message</p>
             <a href="@ListUrl(CurrentPage)">До списку робіт</a>
@@ -148,6 +146,44 @@ else
                 }
             </section>
 
+            <section class="teacher-tests mb-4" aria-labelledby="images-heading">
+                <h2 id="images-heading" class="h4">Зображення для завдань</h2>
+                <p>
+                    Завантаж картинку (PNG, JPG, GIF або WEBP), скопіюй її шлях і встав у поле
+                    <code>image.src</code> або <code>hotspots</code> у файлі тесту — так вона з'явиться в завданні.
+                </p>
+                <div class="teacher-upload">
+                    <InputFile OnChange="OnImageSelectedAsync" accept="image/png,image/jpeg,image/gif,image/webp" class="form-control" />
+                </div>
+                @if (imageError is not null)
+                {
+                    <p class="text-danger mt-2" role="alert">@imageError</p>
+                }
+                else if (imageSuccess is not null)
+                {
+                    <p class="text-success mt-2" role="status">@imageSuccess</p>
+                }
+
+                @if (uploadedImages.Length > 0)
+                {
+                    <div class="teacher-image-gallery mt-3">
+                        @foreach (var path in uploadedImages)
+                        {
+                            <figure class="teacher-image-card" @key="path">
+                                <img src="@path" alt="" loading="lazy" />
+                                <figcaption>
+                                    <input class="form-control form-control-sm" value="@path" readonly
+                                           onfocus="this.select()" aria-label="Шлях до зображення" />
+                                    <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => DeleteImageAsync(path)">
+                                        Видалити
+                                    </button>
+                                </figcaption>
+                            </figure>
+                        }
+                    </div>
+                }
+            </section>
+
             <h2 class="h4">Роботи учнів</h2>
             @if (attempts.Length == 0)
             {
@@ -218,7 +254,9 @@ else
     private string? message;
     private string? uploadSuccess;
     private string[]? uploadError;
-    private bool canViewReports;
+    private string[] uploadedImages = [];
+    private string? imageSuccess;
+    private string? imageError;
     private bool hasMore;
     private int CurrentPage => int.TryParse(PageNumber, out var page) && page is > 0 and <= int.MaxValue / BiologyAttemptStore.PageSize ? page : 1;
 
@@ -235,12 +273,6 @@ else
         if (HttpContext is { } requestContext)
         {
             requestContext.Response.Headers.CacheControl = "no-store";
-            canViewReports = TeacherReportAccess.CanView(Environment, requestContext);
-        }
-
-        if (!canViewReports)
-        {
-            return;
         }
 
         try
@@ -249,6 +281,7 @@ else
             {
                 (attempts, hasMore) = await AttemptStore.ListAsync(CurrentPage, CancellationToken.None);
                 uploadedTests = await TestStore.ListAsync();
+                uploadedImages = ImageStore.List();
                 return;
             }
 
@@ -269,11 +302,6 @@ else
 
     private async Task OnFileSelectedAsync(InputFileChangeEventArgs e)
     {
-        if (!canViewReports)
-        {
-            return;
-        }
-
         uploadError = null;
         uploadSuccess = null;
         try
@@ -299,13 +327,39 @@ else
 
     private async Task ActivateAsync(Guid id)
     {
-        if (!canViewReports)
-        {
-            return;
-        }
-
         await TestStore.ActivateAsync(id);
         uploadedTests = await TestStore.ListAsync();
+    }
+
+    private async Task OnImageSelectedAsync(InputFileChangeEventArgs e)
+    {
+        imageError = null;
+        imageSuccess = null;
+        try
+        {
+            if (!TestImageStore.IsAllowedExtension(e.File.Name))
+            {
+                imageError = "Дозволені лише зображення: PNG, JPG, GIF, WEBP.";
+                return;
+            }
+
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 5_000_000);
+            var path = await ImageStore.SaveAsync(stream, e.File.Name);
+            imageSuccess = $"Завантажено: {path}";
+            uploadedImages = ImageStore.List();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not upload a test image.");
+            imageError = "Не вдалося завантажити зображення (можливо, завелике — до 5 МБ).";
+        }
+    }
+
+    private Task DeleteImageAsync(string path)
+    {
+        ImageStore.Delete(path);
+        uploadedImages = ImageStore.List();
+        return Task.CompletedTask;
     }
 
     private static string ListUrl(int page) => page <= 1 ? "teacher" : $"teacher?page={page}";

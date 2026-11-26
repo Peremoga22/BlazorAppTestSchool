@@ -1,0 +1,158 @@
+@page "/admin/users"
+@layout BiologyLayout
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = ApplicationRoles.Admin)]
+@using BlazorAppTestSchool.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<ApplicationUser> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+
+<PageTitle>Користувачі | Шкільна лабораторія</PageTitle>
+
+<section class="school-lab" aria-labelledby="admin-users-heading">
+    <h1 id="admin-users-heading">Користувачі та ролі</h1>
+    <p>Видай комусь роль, щоб він міг заходити на сторінку вчителя чи сюди ж.</p>
+
+    @if (message is not null)
+    {
+        <p class="@(messageIsError ? "text-danger" : "text-success")" role="status">@message</p>
+    }
+
+    <form class="d-flex flex-wrap gap-2 align-items-end mb-4" @onsubmit="AddRoleAsync">
+        <div>
+            <label class="form-label" for="assign-email">Користувач</label>
+            <select id="assign-email" class="form-select" @bind="selectedEmail">
+                <option value="">Обери користувача</option>
+                @foreach (var user in users)
+                {
+                    <option value="@user.Email">@user.Email</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label" for="assign-role">Роль</label>
+            <input id="assign-role" class="form-control" list="known-roles" @bind="roleToAssign" placeholder="@ApplicationRoles.Teacher" />
+            <datalist id="known-roles">
+                @foreach (var role in knownRoles)
+                {
+                    <option value="@role" />
+                }
+            </datalist>
+        </div>
+        <button type="submit" class="btn btn-primary">Додати роль</button>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr>
+                    <th scope="col">Email</th>
+                    <th scope="col">Ролі</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var user in users)
+                {
+                    <tr>
+                        <th scope="row">@user.Email</th>
+                        <td class="d-flex flex-wrap gap-2">
+                            @foreach (var role in user.Roles)
+                            {
+                                <span class="badge text-bg-secondary d-inline-flex align-items-center gap-2">
+                                    @role
+                                    <button type="button" class="btn-close btn-close-white" style="font-size:.6rem"
+                                            aria-label="@($"Прибрати роль {role} у {user.Email}")"
+                                            @onclick="() => RemoveRoleAsync(user.Email, role)"></button>
+                                </span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@code {
+    private sealed record UserRow(string Email, string[] Roles);
+
+    private UserRow[] users = [];
+    private string[] knownRoles = [];
+    private string selectedEmail = string.Empty;
+    private string roleToAssign = string.Empty;
+    private string? message;
+    private bool messageIsError;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        var rows = new List<UserRow>();
+        foreach (var user in UserManager.Users.ToList())
+        {
+            var roles = await UserManager.GetRolesAsync(user);
+            rows.Add(new UserRow(user.Email ?? user.UserName ?? user.Id, roles.ToArray()));
+        }
+
+        users = rows.OrderBy(row => row.Email).ToArray();
+        knownRoles = RoleManager.Roles.ToList().Select(role => role.Name).Where(name => name is not null).Select(name => name!).Order().ToArray();
+    }
+
+    private async Task AddRoleAsync()
+    {
+        message = null;
+        var email = selectedEmail.Trim();
+        var role = roleToAssign.Trim();
+        if (email.Length == 0 || role.Length == 0)
+        {
+            message = "Обери користувача і вкажи назву ролі.";
+            messageIsError = true;
+            return;
+        }
+
+        var user = await UserManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            message = "Користувача не знайдено.";
+            messageIsError = true;
+            return;
+        }
+
+        if (!await RoleManager.RoleExistsAsync(role))
+        {
+            await RoleManager.CreateAsync(new IdentityRole(role));
+        }
+
+        if (await UserManager.IsInRoleAsync(user, role))
+        {
+            message = $"{email} вже має роль \"{role}\".";
+            messageIsError = false;
+        }
+        else
+        {
+            var result = await UserManager.AddToRoleAsync(user, role);
+            messageIsError = !result.Succeeded;
+            message = result.Succeeded
+                ? $"Роль \"{role}\" додано для {email}."
+                : string.Join("; ", result.Errors.Select(error => error.Description));
+        }
+
+        roleToAssign = string.Empty;
+        await ReloadAsync();
+    }
+
+    private async Task RemoveRoleAsync(string email, string role)
+    {
+        var user = await UserManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            return;
+        }
+
+        await UserManager.RemoveFromRoleAsync(user, role);
+        message = $"Роль \"{role}\" знято з {email}.";
+        messageIsError = false;
+        await ReloadAsync();
+    }
+}

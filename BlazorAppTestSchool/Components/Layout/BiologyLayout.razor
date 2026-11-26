@@ -1,4 +1,7 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@using BlazorAppTestSchool.Data
+@inject NavigationManager NavigationManager
 
 <div class="biology-shell">
     <aside class="biology-sidebar">
@@ -6,6 +9,27 @@
         <nav aria-label="Навігація контрольної">
             <NavLink class="biology-nav-link" href="" Match="NavLinkMatch.All">Учень</NavLink>
             <NavLink class="biology-nav-link" href="teacher">Вчитель</NavLink>
+            <AuthorizeView Roles="@ApplicationRoles.Admin">
+                <Authorized>
+                    <NavLink class="biology-nav-link" href="admin/users">Користувачі</NavLink>
+                </Authorized>
+            </AuthorizeView>
+        </nav>
+        <nav class="mt-3" aria-label="Обліковий запис">
+            <AuthorizeView>
+                <Authorized>
+                    <NavLink class="biology-nav-link" href="Account/Manage">@context.User.Identity?.Name</NavLink>
+                    <form action="Account/Logout" method="post">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                        <button type="submit" class="biology-nav-link biology-nav-button">Вийти</button>
+                    </form>
+                </Authorized>
+                <NotAuthorized>
+                    <NavLink class="biology-nav-link" href="Account/Login">Увійти</NavLink>
+                    <NavLink class="biology-nav-link" href="Account/Register">Зареєструватися</NavLink>
+                </NotAuthorized>
+            </AuthorizeView>
         </nav>
     </aside>
     <main class="biology-content">
@@ -18,3 +42,24 @@
     <a href="." class="reload">Перезавантажити</a>
     <span class="dismiss">×</span>
 </div>
+
+@code {
+    private string? currentUrl;
+
+    protected override void OnInitialized()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

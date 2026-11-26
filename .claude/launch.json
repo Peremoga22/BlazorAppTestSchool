@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "BlazorAppTestSchool",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "BlazorAppTestSchool", "--launch-profile", "http"],
+      "port": 5157
+    }
+  ]
+}

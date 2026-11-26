@@ -29,12 +29,14 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddSingleton<BiologyAttemptStore>();
 builder.Services.AddSingleton<TestDefinitionStore>();
+builder.Services.AddSingleton<TestImageStore>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
         options.SignIn.RequireConfirmedAccount = true;
         options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
@@ -57,6 +59,51 @@ catch (Exception exception)
     app.Logger.LogWarning(exception, "Could not seed the default biology test. Apply database migrations first.");
 }
 
+try
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    foreach (var role in ApplicationRoles.Seeded)
+    {
+        if (!await roleManager.RoleExistsAsync(role))
+        {
+            await roleManager.CreateAsync(new IdentityRole(role));
+        }
+    }
+
+    var adminEmail = builder.Configuration["Seed:AdminEmail"];
+    var adminPassword = builder.Configuration["Seed:AdminPassword"];
+    if (adminEmail is { Length: > 0 } && adminPassword is { Length: > 0 })
+    {
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var admin = await userManager.FindByEmailAsync(adminEmail);
+        if (admin is null)
+        {
+            admin = new ApplicationUser { UserName = adminEmail, Email = adminEmail, EmailConfirmed = true };
+            var created = await userManager.CreateAsync(admin, adminPassword);
+            if (!created.Succeeded)
+            {
+                app.Logger.LogWarning("Could not create the seed admin user: {Errors}",
+                    string.Join("; ", created.Errors.Select(error => error.Description)));
+            }
+        }
+
+        if (!await userManager.IsInRoleAsync(admin, ApplicationRoles.Admin))
+        {
+            await userManager.AddToRoleAsync(admin, ApplicationRoles.Admin);
+        }
+
+        if (!await userManager.IsInRoleAsync(admin, ApplicationRoles.Teacher))
+        {
+            await userManager.AddToRoleAsync(admin, ApplicationRoles.Teacher);
+        }
+    }
+}
+catch (Exception exception)
+{
+    app.Logger.LogWarning(exception, "Could not seed application roles. Apply database migrations first.");
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -73,14 +120,14 @@ app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
+// Serves files uploaded at runtime (e.g. teacher-uploaded test images) from wwwroot,
+// which the build-time MapStaticAssets manifest below does not cover.
+app.UseStaticFiles();
+
 app.MapGet("/teacher/reports/{attemptId:guid}/word", async Task<IResult> (
     Guid attemptId, HttpContext context, IWebHostEnvironment environment, BiologyAttemptStore attempts) =>
 {
     context.Response.Headers.CacheControl = "no-store";
-    if (!TeacherReportAccess.CanView(environment, context))
-    {
-        return Results.NotFound();
-    }
 
     var report = await attempts.FindAsync(attemptId, context.RequestAborted);
     if (report is null)
@@ -92,7 +139,7 @@ app.MapGet("/teacher/reports/{attemptId:guid}/word", async Task<IResult> (
     var document = BiologyAttemptWordDocument.Create(report, diagram);
     return Results.File(document, BiologyAttemptWordDocument.ContentType,
         $"Контрольна з біології {report.Grade} клас {attemptId.ToString("N")[..8]}.docx");
-});
+}).RequireAuthorization(policy => policy.RequireRole(ApplicationRoles.Teacher, ApplicationRoles.Admin));
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

@@ -1,0 +1,120 @@
+@page "/teacher"
+@layout BiologyLayout
+@rendermode InteractiveServer
+@using BlazorAppTestSchool.Data
+@using static BlazorAppTestSchool.Data.BiologyAttemptReport
+@inject BiologyAttemptStore AttemptStore
+@inject ILogger<Teacher> Logger
+
+@if (Preview)
+{
+    <BiologyTest />
+}
+else
+{
+    <PageTitle>Вчитель | Шкільна лабораторія</PageTitle>
+
+    <section class="school-lab" aria-labelledby="teacher-heading">
+        <h1 id="teacher-heading">Сторінка вчителя</h1>
+        <p>Біологія · 7 клас · 12 завдань</p>
+        <a class="btn btn-outline-secondary mb-4" href="teacher?preview=true">Переглянути контрольну</a>
+
+        <h2 class="h4">Результат учня</h2>
+        <form class="biology-profile-form mt-3" @onsubmit="OpenReportAsync" @onsubmit:preventDefault>
+            <label class="form-label" for="report-code">Код від учня</label>
+            <input class="form-control mb-2" id="report-code" @bind="reportCode" required
+                   maxlength="64" autocomplete="off" spellcheck="false" />
+            <button class="btn btn-primary" disabled="@loading">Відкрити роботу</button>
+        </form>
+
+        @if (loading)
+        {
+            <p class="mt-3" role="status">Шукаємо роботу…</p>
+        }
+        else if (message is not null)
+        {
+            <p class="mt-3 text-danger" role="alert">@message</p>
+        }
+        else if (report is { } result)
+        {
+            <section class="mt-4" aria-labelledby="report-heading" aria-live="polite">
+                <h2 id="report-heading" class="h4">@result.StudentName · @result.Grade клас</h2>
+                @if (result.Questions.Any(question => question.Points is null))
+                {
+                    <p>Попередня оцінка: <strong>@result.Score з @result.Questions.Length</strong>.
+                        Відповідь із поясненням очікує перевірки.</p>
+                }
+                else
+                {
+                    <p>Оцінка: <strong>@result.Score з @result.Questions.Length</strong>.</p>
+                }
+                <p>Загальний час: <strong>@FormatDuration(result.Duration)</strong>.</p>
+
+                <ol class="list-group list-group-numbered mt-3">
+                    @foreach (var question in result.Questions)
+                    {
+                        <li class="list-group-item d-flex gap-2">
+                            <div class="flex-grow-1">
+                                <h3 class="h6">@question.Question</h3>
+                                <p class="mb-2 text-break" style="white-space: pre-wrap">@(question.Answer ?? "Без відповіді")</p>
+                                <p class="mb-0">
+                                    <strong>@(question.Points switch { 1 => "1 бал", 0 => "0 балів", _ => "Очікує перевірки" })</strong>
+                                    · @FormatDuration(question.Duration)
+                                    @if (question.TimeExpired)
+                                    {
+                                        <span>· Час вичерпано</span>
+                                    }
+                                </p>
+                            </div>
+                        </li>
+                    }
+                </ol>
+            </section>
+        }
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery]
+    private bool Preview { get; set; }
+
+    private string reportCode = string.Empty;
+    private BiologyAttemptReport? report;
+    private string? message;
+    private bool loading;
+
+    private async Task OpenReportAsync()
+    {
+        if (loading)
+        {
+            return;
+        }
+
+        report = null;
+        message = null;
+        if (!Guid.TryParse(reportCode.Trim(), out var code))
+        {
+            message = "Введи код, який отримав учень після тесту.";
+            return;
+        }
+
+        loading = true;
+        try
+        {
+            report = await AttemptStore.FindAsync(code);
+            if (report is null)
+            {
+                message = "Роботу за цим кодом не знайдено.";
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not load a biology test report.");
+            message = "Роботу не вдалося відкрити. Спробуй ще раз.";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

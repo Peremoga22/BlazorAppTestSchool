@@ -1,0 +1,20 @@
+@inherits LayoutComponentBase
+
+<div class="biology-shell">
+    <aside class="biology-sidebar">
+        <a class="biology-brand" href="">Шкільна лабораторія</a>
+        <nav aria-label="Навігація контрольної">
+            <NavLink class="biology-nav-link" href="" Match="NavLinkMatch.All">Учень</NavLink>
+            <NavLink class="biology-nav-link" href="teacher">Вчитель</NavLink>
+        </nav>
+    </aside>
+    <main class="biology-content">
+        @Body
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Сталася помилка.
+    <a href="." class="reload">Перезавантажити</a>
+    <span class="dismiss">×</span>
+</div>

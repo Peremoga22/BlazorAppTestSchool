@@ -1,7 +1,170 @@
-﻿@page "/"
+@page "/"
+@layout BiologyLayout
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage ProfileStorage
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Контрольна з біології | 7 клас</PageTitle>
 
-<h1>Hello, world!</h1>
+@if (!profileReady)
+{
+    <p role="status">Завантажуємо профіль…</p>
+}
+else if (profile is not { } participant)
+{
+    <section class="school-lab" aria-labelledby="profile-heading">
+        <h1 id="profile-heading">Анкета учня</h1>
+        <form @onsubmit="SaveProfileAsync" @onsubmit:preventDefault class="biology-profile-form">
+            <label for="student-last-name" class="form-label">Прізвище</label>
+            <input id="student-last-name" class="form-control mb-3" @bind="lastName"
+                   maxlength="80" required autocomplete="family-name" />
+            <label for="student-first-name" class="form-label">Ім’я</label>
+            <input id="student-first-name" class="form-control mb-3" @bind="firstName"
+                   maxlength="80" required autocomplete="given-name" />
+            <label for="student-patronymic" class="form-label">По батькові</label>
+            <input id="student-patronymic" class="form-control mb-3" @bind="patronymic" maxlength="80" required />
+            <label for="student-grade" class="form-label">Клас</label>
+            <select id="student-grade" class="form-select mb-3" @bind="grade" required>
+                <option value="">Обери клас</option>
+                <option value="7">7 клас</option>
+                <option value="11">11 клас</option>
+            </select>
+            @if (profileError is not null)
+            {
+                <p class="text-danger" role="alert">@profileError</p>
+            }
+            <button class="btn btn-primary" disabled="@savingProfile">Продовжити</button>
+        </form>
+    </section>
+}
+else
+{
+    <section class="school-lab school-lab-intro" aria-labelledby="test-heading">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <span>@participant.Name · @participant.Grade клас</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    @onclick="ChangeProfileAsync" disabled="@savingProfile">Змінити профіль</button>
+        </div>
+        @if (participant.Grade == 11)
+        {
+            <h1 id="test-heading">Контрольна для 11 класу</h1>
+            <p class="mb-0">Завдання ще готуються.</p>
+        }
+        else
+        {
+            <p class="school-lab-subject">Біологія · 7 клас</p>
+            <h1 id="test-heading" class="mb-3">Вітаємо на контрольній з біології!</h1>
+            <p class="mb-4">
+                На тебе чекають 12 завдань по 1 балу, і на кожне буде від 1 до 3 хвилин залежно від його типу.
+                Працюй самостійно, без копіювання завдань, вставлення готових відповідей і допомоги ChatGPT чи інших сервісів ШІ.
+            </p>
 
-Welcome to your new app.
+            <table class="table mb-0">
+                <caption class="caption-top">Час для кожного типу завдання</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Тип завдання</th>
+                        <th scope="col" class="text-nowrap">Час</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <th scope="row" class="fw-normal">Вибір однієї відповіді</th>
+                        <td class="text-nowrap">1 хв</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" class="fw-normal">Вибір кількох відповідей або пропущені слова</th>
+                        <td class="text-nowrap">1 хв 30 с</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" class="fw-normal">Відповідність, послідовність або аналіз зображення</th>
+                        <td class="text-nowrap">2 хв</td>
+                    </tr>
+                    <tr>
+                        <th scope="row" class="fw-normal">Відкрита відповідь із поясненням</th>
+                        <td class="text-nowrap">3 хв</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="mt-4">
+                <a class="btn btn-primary btn-lg" href="biology-test">Почати тест</a>
+            </div>
+        }
+
+    </section>
+}
+
+@code {
+    private BiologyProfile? profile;
+    private string lastName = string.Empty;
+    private string firstName = string.Empty;
+    private string patronymic = string.Empty;
+    private int? grade;
+    private string? profileError;
+    private bool profileReady;
+    private bool savingProfile;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
+        profile = saved.Value is { IsValid: true } ? saved.Value : null;
+        profileReady = true;
+        StateHasChanged();
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        if (savingProfile)
+        {
+            return;
+        }
+
+        var candidate = new BiologyProfile(lastName.Trim(), firstName.Trim(), patronymic.Trim(), grade ?? 0);
+        if (!candidate.IsValid)
+        {
+            profileError = "Введи прізвище, ім’я, по батькові та обери клас.";
+            return;
+        }
+
+        savingProfile = true;
+        try
+        {
+            await ProfileStorage.SetAsync(BiologyProfile.StorageKey, candidate);
+            profileError = null;
+            profile = candidate;
+        }
+        finally
+        {
+            savingProfile = false;
+        }
+    }
+
+    private async Task ChangeProfileAsync()
+    {
+        if (savingProfile)
+        {
+            return;
+        }
+
+        savingProfile = true;
+        try
+        {
+            await ProfileStorage.DeleteAsync(BiologyProfile.StorageKey);
+            lastName = profile?.LastName ?? string.Empty;
+            firstName = profile?.FirstName ?? string.Empty;
+            patronymic = profile?.Patronymic ?? string.Empty;
+            grade = profile?.Grade;
+            profile = null;
+        }
+        finally
+        {
+            savingProfile = false;
+        }
+    }
+}

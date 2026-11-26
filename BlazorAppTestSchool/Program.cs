@@ -26,6 +26,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+builder.Services.AddSingleton<BiologyAttemptStore>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {

@@ -1,0 +1,37 @@
+@page "/biology-test"
+@layout BiologyLayout
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage ProfileStorage
+@inject NavigationManager Navigation
+
+@if (profile is { } participant)
+{
+    <BiologyTest Participant="participant" />
+}
+else
+{
+    <p role="status">Завантажуємо контрольну…</p>
+}
+
+@code {
+    private BiologyProfile? profile;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
+        if (saved.Value is not { IsValid: true, Grade: 7 } participant)
+        {
+            Navigation.NavigateTo("", replace: true);
+            return;
+        }
+
+        profile = participant;
+        StateHasChanged();
+    }
+}

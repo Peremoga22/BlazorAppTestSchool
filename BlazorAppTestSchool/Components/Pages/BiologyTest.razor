@@ -1,0 +1,411 @@
+@implements IDisposable
+@using BlazorAppTestSchool.Data
+@inject BiologyAttemptStore AttemptStore
+@inject ILogger<BiologyTest> Logger
+@using static BlazorAppTestSchool.Data.BiologyAttemptReport
+
+<PageTitle>Тест з біології | 7 клас</PageTitle>
+
+<p class="school-lab-subject biology-test-label">Біологія · 7 клас · @(Participant?.Name ?? "Перегляд учителя")</p>
+
+@if (questionIndex == Questions.Length)
+{
+    <section class="school-lab" aria-labelledby="result-heading">
+        <h2 id="result-heading">Тест завершено</h2>
+        @if (explanation is not null)
+        {
+            <p>Попередній результат: <strong class="school-lab-score">@score із @Questions.Length балів</strong>. За пояснення можна отримати ще 1 бал після перевірки вчителем.</p>
+            <details class="mb-3">
+                <summary>Твоє пояснення</summary>
+                <p class="mt-2" style="white-space: pre-wrap">@explanation</p>
+            </details>
+        }
+        else
+        {
+            <p>Твій результат: <strong class="school-lab-score">@score із @Questions.Length балів</strong>.</p>
+        }
+        <p>Загальний час: <strong>@FormatDuration(attemptDuration)</strong>.</p>
+        <details class="mb-3">
+            <summary>Час на кожне питання</summary>
+            <ol class="mt-2">
+                @foreach (var result in questionResults)
+                {
+                    <li>@FormatDuration(result.Duration)</li>
+                }
+            </ol>
+        </details>
+        @if (Participant is not null)
+        {
+            @if (reportSaved)
+            {
+                <p>Код для вчителя: <strong class="text-break">@reportCode.ToString("N")</strong></p>
+                <p>Передай цей код учителю, щоб він міг відкрити твою роботу.</p>
+            }
+            else if (savingReport)
+            {
+                <p role="status">Зберігаємо роботу…</p>
+            }
+            else if (saveFailed)
+            {
+                <p class="text-danger" role="alert">Роботу не вдалося зберегти.</p>
+                <button class="btn btn-primary mb-3" @onclick="SaveReportAsync">Спробувати ще раз</button>
+            }
+        }
+        <a class="btn btn-outline-secondary" href="@(Participant is null ? "teacher" : "")">@(Participant is null ? "До сторінки вчителя" : "Повернутися до правил")</a>
+    </section>
+}
+else
+{
+    var question = Questions[questionIndex];
+    var displayedIndex = questionIndex;
+
+    <section @key="displayedIndex" class="school-lab" aria-labelledby="question-heading">
+        <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+            <span>Питання @(displayedIndex + 1) з @Questions.Length</span>
+            <span class="school-lab-timer @(secondsLeft <= 15 ? "school-lab-timer-low" : null)" role="timer">Залишилось @secondsLeft с</span>
+        </div>
+
+        <h2 id="question-heading" class="h4" tabindex="-1" @ref="questionHeading"
+            @oncopy:preventDefault>@question.Text</h2>
+
+        @if (question.Kind == Format.Diagram)
+        {
+            <figure class="my-2">
+                <img class="school-lab-root-diagram" src="root-tip.png" width="1080" height="1024"
+                     alt="Кінчик кореня з чотирма ділянками. Від стебла до кінчика йдуть А з тонкими бічними виростами, Б, В і Г на самому кінчику." />
+                <figcaption>Схема кінчика кореня</figcaption>
+            </figure>
+        }
+
+        <fieldset class="my-3" aria-labelledby="question-heading" @oncopy:preventDefault>
+            @if (question.Kind is Format.Blank or Format.Explanation)
+            {
+                <label class="form-label" for="written-answer">Твоя відповідь</label>
+                <textarea id="written-answer" class="form-control" rows="@(question.Kind == Format.Blank ? 1 : 4)"
+                          maxlength="1000" value="@writtenAnswer" @onpaste:preventDefault
+                          @oninput="e => UpdateText(displayedIndex, e.Value?.ToString() ?? string.Empty)"></textarea>
+            }
+            else if (question.Kind is Format.Match or Format.Order)
+            {
+                @for (var row = 0; row < question.Key.Length; row++)
+                {
+                    var rowIndex = row;
+                    var rowId = $"answer-{row}";
+                    <label class="form-label mt-2" for="@rowId">@(question.Labels?[row] ?? $"Крок {row + 1}")</label>
+                    <select id="@rowId" class="form-select" value="@orderedAnswers[row]"
+                            @onchange="e => SetPosition(displayedIndex, rowIndex, e.Value?.ToString())">
+                        <option value="-1">Обери відповідь</option>
+                        @for (var option = 0; option < question.Options.Length; option++)
+                        {
+                            <option value="@option">@question.Options[option]</option>
+                        }
+                    </select>
+                }
+            }
+            else
+            {
+                @if (question.Kind == Format.Multiple)
+                {
+                    <p>Познач усі правильні відповіді.</p>
+                }
+
+                @for (var i = 0; i < question.Options.Length; i++)
+                {
+                    var optionIndex = i;
+                    var optionId = $"question-{displayedIndex}-option-{optionIndex}";
+                    <div class="form-check mb-2" @key="optionId">
+                        <input class="form-check-input" type="@(question.Kind == Format.Multiple ? "checkbox" : "radio")"
+                               id="@optionId" name="@($"question-{displayedIndex}")"
+                               checked="@selectedOptions.Contains(optionIndex)"
+                               @onchange="e => SelectOption(displayedIndex, optionIndex, e.Value is true)" />
+                        <label class="form-check-label" for="@optionId">@question.Options[optionIndex]</label>
+                    </div>
+                }
+            }
+        </fieldset>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" disabled="@(!HasAnswer(question))"
+                    @onclick="() => AdvanceAsync(displayedIndex)">
+                @(displayedIndex == Questions.Length - 1 ? "Завершити тест" : "Наступне питання")
+            </button>
+            <button class="btn btn-outline-secondary" @onclick="() => AdvanceAsync(displayedIndex, skip: true)">
+                Пропустити
+            </button>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public BiologyProfile? Participant { get; set; }
+
+    private static readonly Question[] Questions =
+    [
+        new("Яка структура відокремлює вміст клітини від зовнішнього середовища?",
+            ["Ядро", "Плазматична мембрана", "Рибосома", "Вакуоля"], [1]),
+        new("Що мають і прокаріотичні, і еукаріотичні клітини?",
+            ["Плазматичну мембрану", "Оформлене ядро", "Рибосоми", "Спадковий матеріал"], [0, 2, 3], Format.Multiple),
+        new("У зелених клітинах рослини фотосинтез відбувається в ___.", [], [], Format.Blank),
+        new("Який із цих організмів є одноклітинним еукаріотом?",
+            ["Сосна", "Папороть", "Кишкова паличка", "Амеба"], [3]),
+        new("Який пігмент зелених водоростей поглинає світло для фотосинтезу?",
+            ["Гемоглобін", "Меланін", "Хлорофіл", "Кератин"], [2]),
+        new("На схемі кореня познач ділянку, через яку рослина поглинає більшу частину води.",
+            ["А", "Б", "В", "Г"], [0], Format.Diagram),
+        new("Зістав ксилему, флоему й продихи з їхніми функціями.",
+            ["Регулюють газообмін і випаровування", "Проводить воду й мінеральні речовини", "Переносить органічні речовини"],
+            [1, 2, 0], Format.Match, ["Ксилема", "Флоема", "Продихи"]),
+        new("Що утворюється у спорангіях папороті?", ["Пилок", "Насіння", "Плоди", "Спори"], [3]),
+        new("Де розвиваються насінні зачатки сосни?",
+            ["На лусках жіночих шишок", "У зав’язі квітки", "У плоді", "На кінчиках коренів"], [0]),
+        new("Розташуй події в порядку, у якому вони відбуваються у квіткової рослини.",
+            ["Розвиток плоду", "Запилення", "Запліднення"], [1, 2, 0], Format.Order),
+        new("З якої частини квітки зазвичай утворюється плід після запліднення?",
+            ["З пиляка", "З пелюстки", "Із зав’язі", "Із чашолистка"], [2]),
+        new("У спеку продихи закрилися. Як це вплине на втрату води листком і чому?", [], [], Format.Explanation)
+    ];
+
+    private readonly CancellationTokenSource timerCancellation = new();
+    private ElementReference questionHeading;
+    private long questionStartedAt;
+    private int questionIndex;
+    private readonly HashSet<int> selectedOptions = [];
+    private int[] orderedAnswers = [];
+    private string writtenAnswer = string.Empty;
+    private string? explanation;
+    private int score;
+    private readonly List<BiologyQuestionResult> questionResults = [];
+    private readonly Guid reportCode = Guid.NewGuid();
+    private bool savingReport;
+    private bool reportSaved;
+    private bool saveFailed;
+    private TimeSpan attemptDuration;
+    private int secondsLeft = Questions[0].Seconds;
+    private bool focusQuestion;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            questionStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+            _ = RunTimerAsync(timerCancellation.Token);
+        }
+
+        if (focusQuestion)
+        {
+            focusQuestion = false;
+            await questionHeading.FocusAsync();
+        }
+    }
+
+    private async Task RunTimerAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(async () =>
+                {
+                    if (questionIndex == Questions.Length)
+                    {
+                        return;
+                    }
+
+                    secondsLeft = GetSecondsLeft();
+                    if (secondsLeft == 0)
+                    {
+                        await AdvanceAsync(questionIndex);
+                    }
+
+                    StateHasChanged();
+                });
+
+                if (questionIndex == Questions.Length)
+                {
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private int GetSecondsLeft()
+    {
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(questionStartedAt).TotalSeconds;
+        return Math.Max(0, (int)Math.Ceiling(Questions[questionIndex].Seconds - elapsed));
+    }
+
+    private bool CanAnswer(int index) =>
+        index == questionIndex && index < Questions.Length && GetSecondsLeft() > 0;
+
+    private bool HasAnswer(Question question) => question.Kind switch
+    {
+        Format.Blank or Format.Explanation => !string.IsNullOrWhiteSpace(writtenAnswer),
+        Format.Match or Format.Order => orderedAnswers.All(answer => answer >= 0),
+        _ => selectedOptions.Count > 0
+    };
+
+    private void UpdateText(int index, string value)
+    {
+        if (CanAnswer(index))
+        {
+            writtenAnswer = value.Length <= 1000 ? value : value[..1000];
+        }
+    }
+
+    private void SetPosition(int index, int row, string? value)
+    {
+        if (CanAnswer(index) && int.TryParse(value, out var option) && option >= -1 && option < Questions[index].Options.Length)
+        {
+            orderedAnswers[row] = option;
+        }
+    }
+
+    private void SelectOption(int index, int option, bool isChecked)
+    {
+        if (!CanAnswer(index))
+        {
+            return;
+        }
+
+        if (Questions[index].Kind != Format.Multiple)
+        {
+            selectedOptions.Clear();
+            selectedOptions.Add(option);
+        }
+        else if (isChecked)
+        {
+            selectedOptions.Add(option);
+        }
+        else
+        {
+            selectedOptions.Remove(option);
+        }
+    }
+
+    private async Task AdvanceAsync(int displayedIndex, bool skip = false)
+    {
+        if (displayedIndex != questionIndex || questionIndex == Questions.Length)
+        {
+            return;
+        }
+
+        var question = Questions[questionIndex];
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(questionStartedAt, now);
+        var limit = TimeSpan.FromSeconds(question.Seconds);
+        var timeExpired = elapsed >= limit;
+        var duration = timeExpired ? limit : elapsed;
+        var answer = skip && !timeExpired ? null : GetAnswerText(question);
+        int? points = 0;
+
+        if (answer is not null)
+        {
+            if (question.Kind == Format.Explanation)
+            {
+                explanation = answer;
+                points = null;
+            }
+            else if (question.Kind switch
+            {
+                Format.Blank => string.Equals(answer.TrimEnd('.'), "хлоропластах", StringComparison.OrdinalIgnoreCase),
+                Format.Match or Format.Order => orderedAnswers.SequenceEqual(question.Key),
+                _ => selectedOptions.SetEquals(question.Key)
+            })
+            {
+                points = 1;
+                score++;
+            }
+        }
+
+        questionResults.Add(new BiologyQuestionResult(question.Text, answer, points, duration, timeExpired));
+        attemptDuration += elapsed;
+
+        questionIndex++;
+        selectedOptions.Clear();
+        writtenAnswer = string.Empty;
+        if (questionIndex < Questions.Length)
+        {
+            var next = Questions[questionIndex];
+            orderedAnswers = new int[next.Key.Length];
+            Array.Fill(orderedAnswers, -1);
+            questionStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+            secondsLeft = next.Seconds;
+            focusQuestion = true;
+        }
+        else
+        {
+            await SaveReportAsync();
+        }
+    }
+
+    private string? GetAnswerText(Question question)
+    {
+        if (question.Kind is Format.Blank or Format.Explanation)
+        {
+            return string.IsNullOrWhiteSpace(writtenAnswer) ? null : writtenAnswer.Trim();
+        }
+
+        if (question.Kind is Format.Match or Format.Order)
+        {
+            var choices = orderedAnswers.Select((option, row) => (Option: option, Row: row))
+                .Where(choice => choice.Option >= 0)
+                .Select(choice => $"{question.Labels?[choice.Row] ?? $"Крок {choice.Row + 1}"}: {question.Options[choice.Option]}")
+                .ToArray();
+            return choices.Length == 0 ? null : string.Join(Environment.NewLine, choices);
+        }
+
+        return selectedOptions.Count == 0
+            ? null
+            : string.Join(", ", selectedOptions.Order().Select(option => question.Options[option]));
+    }
+
+    private async Task SaveReportAsync()
+    {
+        if (Participant is not { } participant || savingReport || reportSaved)
+        {
+            return;
+        }
+
+        savingReport = true;
+        saveFailed = false;
+        try
+        {
+            var report = new BiologyAttemptReport(participant.Name, participant.Grade, score,
+                attemptDuration, questionResults.ToArray());
+            await AttemptStore.SaveAsync(reportCode, report);
+            reportSaved = true;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not save a biology test report.");
+            saveFailed = true;
+        }
+        finally
+        {
+            savingReport = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        timerCancellation.Cancel();
+        timerCancellation.Dispose();
+    }
+
+    private enum Format { Single, Multiple, Blank, Diagram, Match, Order, Explanation }
+
+    private sealed record Question(string Text, string[] Options, int[] Key, Format Kind = Format.Single, string[]? Labels = null)
+    {
+        public int Seconds => Kind switch
+        {
+            Format.Multiple or Format.Blank => 90,
+            Format.Diagram or Format.Match or Format.Order => 120,
+            Format.Explanation => 180,
+            _ => 60
+        };
+    }
+}

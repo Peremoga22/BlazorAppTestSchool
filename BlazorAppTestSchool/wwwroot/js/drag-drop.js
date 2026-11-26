@@ -2,6 +2,16 @@
 // No external libraries: works with mouse, touch and pen via the Pointer Events API,
 // and falls back to tap-to-pick / tap-to-place for accessibility and flaky touch drags.
 // Markup contract: draggable chips carry [data-dnd-item="id"], drop targets carry [data-dnd-zone="id"].
+
+// Used by the teacher's question builder: converts a click point into a percentage position
+// relative to an image element, so hotspots stay correctly placed at any image size.
+export function relativePercent(element, clientX, clientY) {
+    const rect = element.getBoundingClientRect();
+    const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
+    return [x, y];
+}
+
 export function init(containerEl, dotNetRef) {
     let drag = null;
     let pickedId = null;

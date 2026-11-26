@@ -537,7 +537,8 @@ else
             {
                 LastName = participant.LastName,
                 FirstName = participant.FirstName,
-                Patronymic = participant.Patronymic
+                Patronymic = participant.Patronymic,
+                TestTitle = Test.Title
             };
             await AttemptStore.SaveAsync(attemptId, report);
             reportSaved = true;

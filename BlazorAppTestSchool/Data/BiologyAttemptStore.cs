@@ -42,7 +42,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
             var report = ReadReport(attempt.ReportJson);
             return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, report.StudentName,
                 report.Grade, report.Score, report.Questions.Length,
-                report.Questions.Any(question => question.Points is null), report.Duration);
+                report.Questions.Any(question => question.Points is null), report.Duration, report.TestTitle);
         }).ToArray();
 
         return (summaries, attempts.Length > PageSize);
@@ -67,4 +67,4 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
 
 public sealed record BiologyAttemptSummary(
     Guid Id, DateTimeOffset? SubmittedAt, string StudentName, int Grade,
-    int Score, int MaxScore, bool PendingReview, TimeSpan Duration);
+    int Score, int MaxScore, bool PendingReview, TimeSpan Duration, string? TestTitle);

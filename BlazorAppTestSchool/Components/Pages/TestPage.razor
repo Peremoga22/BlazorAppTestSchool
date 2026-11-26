@@ -15,7 +15,7 @@ else if (!testReady)
 {
     <p role="status">Завантажуємо контрольну…</p>
 }
-else if (test is null)
+else if (variants.Length == 0)
 {
     <section class="school-lab" aria-labelledby="no-test-heading">
         <h1 id="no-test-heading">Тест ще не готовий</h1>
@@ -23,13 +23,29 @@ else if (test is null)
         <a class="btn btn-outline-secondary" href="">На головну</a>
     </section>
 }
+else if (variants.Length > 1 && test is null)
+{
+    <section class="school-lab" aria-labelledby="pick-variant-heading">
+        <h1 id="pick-variant-heading">Обери варіант контрольної</h1>
+        <p>Учитель підготував кілька варіантів — обери один і більше не зможеш його змінити.</p>
+        <div class="d-flex flex-column gap-2 mt-3">
+            @foreach (var variant in variants)
+            {
+                <a class="btn btn-primary" href="@($"biology-test?test={variant.Id:N}")">@variant.Title</a>
+            }
+        </div>
+    </section>
+}
 else
 {
-    <TestRunner Test="test" Participant="participant" />
+    <TestRunner Test="test!" Participant="participant" />
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "test")] private string? SelectedTestId { get; set; }
+
     private BiologyProfile? profile;
+    private TestDefinitionSummary[] variants = [];
     private TestDefinitionModel? test;
     private bool testReady;
 
@@ -48,9 +64,34 @@ else
         }
 
         profile = participant;
+        await RefreshTestAsync(participant);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Re-runs when ?test= changes via a same-page link click (picking a variant);
+        // the profile itself is only loaded once, after the first render, above.
+        if (profile is { } participant)
+        {
+            await RefreshTestAsync(participant);
+        }
+    }
+
+    private async Task RefreshTestAsync(BiologyProfile participant)
+    {
+        testReady = false;
         StateHasChanged();
 
-        test = await TestStore.GetActiveAsync(BiologySeed.Subject, participant.Grade);
+        variants = await TestStore.ListActiveAsync(BiologySeed.Subject, participant.Grade);
+
+        var chosenId = SelectedTestId is { Length: > 0 } id && Guid.TryParse(id, out var guid) ? guid : (Guid?)null;
+        test = variants.Length switch
+        {
+            1 => await TestStore.GetAsync(variants[0].Id),
+            > 1 when chosenId is { } selected && variants.Any(v => v.Id == selected) => await TestStore.GetAsync(selected),
+            _ => null
+        };
+
         testReady = true;
         StateHasChanged();
     }

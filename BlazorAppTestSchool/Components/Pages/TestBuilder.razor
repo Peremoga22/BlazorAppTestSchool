@@ -1,0 +1,799 @@
+@page "/teacher/builder/{TestId:guid?}"
+@layout BiologyLayout
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = ApplicationRoles.Teacher + "," + ApplicationRoles.Admin)]
+@implements IAsyncDisposable
+@using BlazorAppTestSchool.Data
+@using BlazorAppTestSchool.Data.Testing
+@using Microsoft.AspNetCore.Authorization
+@inject TestDefinitionStore TestStore
+@inject TestImageStore ImageStore
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ILogger<TestBuilder> Logger
+
+<PageTitle>Конструктор тесту | Шкільна лабораторія</PageTitle>
+
+<section class="school-lab school-lab-wide" aria-labelledby="builder-heading">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h1 id="builder-heading" class="mb-0">@(savedId is null ? "Новий тест" : "Редагування тесту")</h1>
+        <div class="d-flex gap-2">
+            @if (savedId is { } id)
+            {
+                <a class="btn btn-outline-secondary" href="@($"teacher?preview=true&test={id:N}")" target="_blank">
+                    Переглянути
+                </a>
+            }
+            <a class="btn btn-outline-secondary" href="teacher">До сторінки вчителя</a>
+        </div>
+    </div>
+
+    @if (loadError is not null)
+    {
+        <p class="text-danger" role="alert">@loadError</p>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <label class="form-label" for="builder-title">Назва тесту</label>
+                <input id="builder-title" class="form-control" @bind="title" @bind:event="oninput" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="builder-subject">Предмет</label>
+                <input id="builder-subject" class="form-control" @bind="subject" @bind:event="oninput" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="builder-grade">Клас</label>
+                <input id="builder-grade" type="number" min="1" max="11" class="form-control" @bind="grade" @bind:event="oninput" />
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h5 mb-0">Питання (@questions.Count)</h2>
+            <button type="button" class="btn btn-primary btn-sm" @onclick="AddQuestion" disabled="@(editing is not null)">
+                + Додати питання
+            </button>
+        </div>
+
+        @if (questions.Count == 0)
+        {
+            <p class="text-muted">Питань ще немає — додай перше.</p>
+        }
+        else
+        {
+            <ol class="list-group list-group-numbered mb-4">
+                @foreach (var q in questions)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-start gap-2 flex-wrap" @key="q.Id">
+                        <div class="flex-grow-1">
+                            <span class="badge text-bg-secondary">@TypeLabel(q.Type)</span>
+                            @Truncate(q.Text, 90)
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => MoveUp(q)" title="Вгору">↑</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => MoveDown(q)" title="Вниз">↓</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(q)" disabled="@(editing is not null)">Редагувати</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Remove(q)" disabled="@(editing is not null)">Видалити</button>
+                        </div>
+                    </li>
+                }
+            </ol>
+        }
+
+        @if (editing is { } draft)
+        {
+            <div class="school-lab builder-editor mb-4">
+                <h3 class="h5">Питання</h3>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label" for="q-type">Тип питання</label>
+                        <select id="q-type" class="form-select" value="@draft.Type" @onchange="OnTypeChanged">
+                            @foreach (var type in Enum.GetValues<QuestionType>())
+                            {
+                                <option value="@type">@TypeLabel(type)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="q-seconds">Час (секунд, необов'язково)</label>
+                        <input id="q-seconds" type="number" min="10" class="form-control" @bind="draft.Seconds" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="q-text">Текст питання</label>
+                    <textarea id="q-text" class="form-control" rows="2" @bind="draft.Text" @bind:event="oninput"></textarea>
+                </div>
+
+                @if (draft.Type != QuestionType.DiagramLabel)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Зображення (необов'язково)</label>
+                        <InputFile OnChange="OnQuestionImageSelectedAsync" accept="image/png,image/jpeg,image/gif,image/webp" class="form-control" />
+                        @if (draft.ImageSrc is { } illustrationSrc)
+                        {
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <img src="@illustrationSrc" alt="" style="height:4rem;border-radius:.5rem" />
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => draft.ImageSrc = null">Прибрати</button>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (imageError is not null)
+                {
+                    <p class="text-danger" role="alert">@imageError</p>
+                }
+
+                @switch (draft.Type)
+                {
+                    case QuestionType.Single:
+                    case QuestionType.Multiple:
+                        <div class="mb-3">
+                            <label class="form-label">Варіанти відповідей (познач правильні)</label>
+                            @for (var i = 0; i < draft.Options.Count; i++)
+                            {
+                                var idx = i;
+                                <div class="d-flex gap-2 align-items-center mb-2">
+                                    <input type="@(draft.Type == QuestionType.Multiple ? "checkbox" : "radio")" name="answer-key"
+                                           checked="@draft.AnswerKey.Contains(idx)"
+                                           @onchange="e => ToggleAnswer(idx, e.Value is true)" />
+                                    <input class="form-control" value="@draft.Options[idx]"
+                                           @oninput="e => draft.Options[idx] = e.Value?.ToString() ?? string.Empty" />
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveOption(idx)">×</button>
+                                </div>
+                            }
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddOption">+ Варіант</button>
+                        </div>
+                        break;
+
+                    case QuestionType.Blank:
+                        <div class="mb-3">
+                            <label class="form-label" for="q-blank">Правильне слово чи фраза</label>
+                            <input id="q-blank" class="form-control" @bind="draft.BlankAnswer" @bind:event="oninput" />
+                        </div>
+                        break;
+
+                    case QuestionType.Explanation:
+                        <p class="text-muted">Додаткових полів не потрібно — відповідь переглядає й оцінює вчитель вручну.</p>
+                        break;
+
+                    case QuestionType.Match:
+                        <div class="mb-3">
+                            <label class="form-label">Терміни та правильний опис для кожного</label>
+                            @for (var i = 0; i < draft.Labels.Count; i++)
+                            {
+                                var idx = i;
+                                <div class="row g-2 mb-2 align-items-center">
+                                    <div class="col-4">
+                                        <input class="form-control" value="@draft.Labels[idx]" placeholder="Термін"
+                                               @oninput="e => draft.Labels[idx] = e.Value?.ToString() ?? string.Empty" />
+                                    </div>
+                                    <div class="col-6">
+                                        <select class="form-select" value="@MatchKeyFor(draft, idx)" @onchange="e => SetMatchKey(idx, e.Value)">
+                                            <option value="-1">Обери опис</option>
+                                            @for (var o = 0; o < draft.Options.Count; o++)
+                                            {
+                                                <option value="@o">@draft.Options[o]</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    <div class="col-2">
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLabel(idx)">×</button>
+                                    </div>
+                                </div>
+                            }
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddLabel">+ Термін</button>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Варіанти описів (що учень перетягує)</label>
+                            @for (var i = 0; i < draft.Options.Count; i++)
+                            {
+                                var idx = i;
+                                <div class="d-flex gap-2 align-items-center mb-2">
+                                    <input class="form-control" value="@draft.Options[idx]" placeholder="Опис"
+                                           @oninput="e => draft.Options[idx] = e.Value?.ToString() ?? string.Empty" />
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveMatchOption(idx)">×</button>
+                                </div>
+                            }
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddMatchOption">+ Опис</button>
+                        </div>
+                        break;
+
+                    case QuestionType.Order:
+                        <div class="mb-3">
+                            <label class="form-label">Кроки у правильному порядку (учню їх покажемо впереміш)</label>
+                            @for (var i = 0; i < draft.OrderItems.Count; i++)
+                            {
+                                var idx = i;
+                                <div class="d-flex gap-2 align-items-center mb-2">
+                                    <span class="text-muted">@(idx + 1).</span>
+                                    <input class="form-control" value="@draft.OrderItems[idx]"
+                                           @oninput="e => draft.OrderItems[idx] = e.Value?.ToString() ?? string.Empty" />
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => MoveOrderItemUp(idx)">↑</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => MoveOrderItemDown(idx)">↓</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveOrderItem(idx)">×</button>
+                                </div>
+                            }
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddOrderItem">+ Крок</button>
+                        </div>
+                        break;
+
+                    case QuestionType.DiagramLabel:
+                        <div class="mb-3">
+                            <label class="form-label">Картинка</label>
+                            <InputFile OnChange="OnQuestionImageSelectedAsync" accept="image/png,image/jpeg,image/gif,image/webp" class="form-control mb-2" />
+                            @if (draft.ImageSrc is { } diagramSrc)
+                            {
+                                <p class="test-dnd-hint">Клікни на картинку, щоб додати позначку, потім впиши підпис нижче.</p>
+                                <div class="dnd-area-diagram mb-3">
+                                    <div class="dnd-diagram-wrap">
+                                        <img class="dnd-diagram-image" src="@diagramSrc" alt="" style="cursor:crosshair"
+                                             @ref="diagramImageRef" @onclick="OnDiagramImageClick" />
+                                        @foreach (var hotspot in draft.Hotspots)
+                                        {
+                                            <div class="dnd-hotspot" style="left:@(hotspot.X.ToString(System.Globalization.CultureInfo.InvariantCulture))%; top:@(hotspot.Y.ToString(System.Globalization.CultureInfo.InvariantCulture))%;">
+                                                <span class="dnd-hotspot-marker"></span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                                @for (var i = 0; i < draft.Hotspots.Count; i++)
+                                {
+                                    var idx = i;
+                                    <div class="d-flex gap-2 align-items-center mb-2">
+                                        <span class="text-muted">#@(idx + 1)</span>
+                                        <input class="form-control" value="@draft.Hotspots[idx].Label" placeholder="Підпис (напр. А)"
+                                               @oninput="e => draft.Hotspots[idx].Label = e.Value?.ToString() ?? string.Empty" />
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveHotspot(idx)">×</button>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <p class="text-muted">Спершу завантаж картинку.</p>
+                            }
+                        </div>
+                        break;
+                }
+
+                @if (questionError is not null)
+                {
+                    <p class="text-danger" role="alert">@questionError</p>
+                }
+
+                <div class="d-flex gap-2 mt-3">
+                    <button type="button" class="btn btn-primary" @onclick="CommitQuestion">Зберегти питання</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CancelEdit">Скасувати</button>
+                </div>
+            </div>
+        }
+
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <button type="button" class="btn btn-primary" @onclick="SaveTestAsync" disabled="@(saving || editing is not null)">
+                Зберегти тест
+            </button>
+            @if (saveMessage is not null)
+            {
+                <span class="text-success">@saveMessage</span>
+            }
+            @if (saveErrors is { Length: > 0 } errors)
+            {
+                <ul class="text-danger mb-0" role="alert">
+                    @foreach (var error in errors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public Guid? TestId { get; set; }
+
+    private string title = string.Empty;
+    private string subject = "Біологія";
+    private int grade = 7;
+    private readonly List<QuestionDraft> questions = [];
+    private QuestionDraft? editing;
+    private bool isNewQuestion;
+    private Guid? savedId;
+    private string? loadError;
+    private string? saveMessage;
+    private string[]? saveErrors;
+    private string? imageError;
+    private string? questionError;
+    private bool saving;
+
+    private IJSObjectReference? dragModule;
+    private ElementReference diagramImageRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (TestId is { } id)
+        {
+            var model = await TestStore.GetAsync(id);
+            if (model is null)
+            {
+                loadError = "Тест не знайдено.";
+                return;
+            }
+
+            savedId = id;
+            title = model.Title;
+            subject = model.Subject;
+            grade = model.Grade ?? 7;
+            questions.AddRange(model.Questions.Select(QuestionDraft.FromQuestion));
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dragModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/drag-drop.js");
+        }
+    }
+
+    private static string TypeLabel(QuestionType type) => type switch
+    {
+        QuestionType.Single => "Один варіант",
+        QuestionType.Multiple => "Кілька варіантів",
+        QuestionType.Blank => "Пропущене слово",
+        QuestionType.Explanation => "Пояснення",
+        QuestionType.Match => "Зіставлення",
+        QuestionType.Order => "Послідовність",
+        QuestionType.DiagramLabel => "Підписи на картинці",
+        _ => type.ToString()
+    };
+
+    private static string Truncate(string text, int length) =>
+        text.Length <= length ? text : text[..length] + "…";
+
+    private void AddQuestion()
+    {
+        editing = new QuestionDraft { Type = QuestionType.Single, Options = ["", ""] };
+        isNewQuestion = true;
+        questionError = null;
+        imageError = null;
+    }
+
+    private void Edit(QuestionDraft question)
+    {
+        editing = question.Clone();
+        isNewQuestion = false;
+        questionError = null;
+        imageError = null;
+    }
+
+    private void CancelEdit()
+    {
+        editing = null;
+        questionError = null;
+        imageError = null;
+    }
+
+    private void Remove(QuestionDraft question) => questions.Remove(question);
+
+    private void MoveUp(QuestionDraft question)
+    {
+        var index = questions.IndexOf(question);
+        if (index > 0)
+        {
+            (questions[index - 1], questions[index]) = (questions[index], questions[index - 1]);
+        }
+    }
+
+    private void MoveDown(QuestionDraft question)
+    {
+        var index = questions.IndexOf(question);
+        if (index >= 0 && index < questions.Count - 1)
+        {
+            (questions[index + 1], questions[index]) = (questions[index], questions[index + 1]);
+        }
+    }
+
+    private void OnTypeChanged(ChangeEventArgs e)
+    {
+        if (editing is null || e.Value is not string value || !Enum.TryParse<QuestionType>(value, out var type))
+        {
+            return;
+        }
+
+        editing.Type = type;
+        if (type is QuestionType.Single or QuestionType.Multiple && editing.Options.Count < 2)
+        {
+            editing.Options.AddRange(Enumerable.Repeat(string.Empty, 2 - editing.Options.Count));
+        }
+
+        if (type == QuestionType.Match)
+        {
+            if (editing.Labels.Count == 0)
+            {
+                editing.Labels.Add(string.Empty);
+            }
+
+            if (editing.Options.Count < 2)
+            {
+                editing.Options.AddRange(Enumerable.Repeat(string.Empty, 2 - editing.Options.Count));
+            }
+        }
+
+        if (type == QuestionType.Order && editing.OrderItems.Count < 2)
+        {
+            editing.OrderItems.AddRange(Enumerable.Repeat(string.Empty, 2 - editing.OrderItems.Count));
+        }
+    }
+
+    private void ToggleAnswer(int index, bool isChecked)
+    {
+        if (editing is null)
+        {
+            return;
+        }
+
+        if (editing.Type != QuestionType.Multiple)
+        {
+            editing.AnswerKey.Clear();
+            if (isChecked)
+            {
+                editing.AnswerKey.Add(index);
+            }
+
+            return;
+        }
+
+        if (isChecked)
+        {
+            editing.AnswerKey.Add(index);
+        }
+        else
+        {
+            editing.AnswerKey.Remove(index);
+        }
+    }
+
+    private void AddOption() => editing?.Options.Add(string.Empty);
+
+    private void RemoveOption(int index)
+    {
+        if (editing is null)
+        {
+            return;
+        }
+
+        editing.Options.RemoveAt(index);
+        editing.AnswerKey = editing.AnswerKey
+            .Where(i => i != index)
+            .Select(i => i > index ? i - 1 : i)
+            .ToHashSet();
+    }
+
+    private static int MatchKeyFor(QuestionDraft draft, int labelIndex) =>
+        labelIndex < draft.MatchKey.Count ? draft.MatchKey[labelIndex] : -1;
+
+    private void SetMatchKey(int labelIndex, object? value)
+    {
+        if (editing is null || value is not string text || !int.TryParse(text, out var optionIndex))
+        {
+            return;
+        }
+
+        while (editing.MatchKey.Count <= labelIndex)
+        {
+            editing.MatchKey.Add(-1);
+        }
+
+        editing.MatchKey[labelIndex] = optionIndex;
+    }
+
+    private void AddLabel()
+    {
+        editing?.Labels.Add(string.Empty);
+        editing?.MatchKey.Add(-1);
+    }
+
+    private void RemoveLabel(int index)
+    {
+        if (editing is null)
+        {
+            return;
+        }
+
+        editing.Labels.RemoveAt(index);
+        if (index < editing.MatchKey.Count)
+        {
+            editing.MatchKey.RemoveAt(index);
+        }
+    }
+
+    private void AddMatchOption() => editing?.Options.Add(string.Empty);
+
+    private void RemoveMatchOption(int index)
+    {
+        if (editing is null)
+        {
+            return;
+        }
+
+        editing.Options.RemoveAt(index);
+        for (var i = 0; i < editing.MatchKey.Count; i++)
+        {
+            if (editing.MatchKey[i] == index)
+            {
+                editing.MatchKey[i] = -1;
+            }
+            else if (editing.MatchKey[i] > index)
+            {
+                editing.MatchKey[i]--;
+            }
+        }
+    }
+
+    private void AddOrderItem() => editing?.OrderItems.Add(string.Empty);
+
+    private void RemoveOrderItem(int index) => editing?.OrderItems.RemoveAt(index);
+
+    private void MoveOrderItemUp(int index)
+    {
+        if (editing is null || index <= 0)
+        {
+            return;
+        }
+
+        (editing.OrderItems[index - 1], editing.OrderItems[index]) = (editing.OrderItems[index], editing.OrderItems[index - 1]);
+    }
+
+    private void MoveOrderItemDown(int index)
+    {
+        if (editing is null || index >= editing.OrderItems.Count - 1)
+        {
+            return;
+        }
+
+        (editing.OrderItems[index + 1], editing.OrderItems[index]) = (editing.OrderItems[index], editing.OrderItems[index + 1]);
+    }
+
+    private void RemoveHotspot(int index) => editing?.Hotspots.RemoveAt(index);
+
+    private async Task OnQuestionImageSelectedAsync(InputFileChangeEventArgs e)
+    {
+        imageError = null;
+        if (editing is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!TestImageStore.IsAllowedExtension(e.File.Name))
+            {
+                imageError = "Дозволені лише зображення: PNG, JPG, GIF, WEBP.";
+                return;
+            }
+
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 5_000_000);
+            var path = await ImageStore.SaveAsync(stream, e.File.Name);
+            editing.ImageSrc = path;
+            editing.ImageAlt = editing.Text;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not upload a question image.");
+            imageError = "Не вдалося завантажити зображення (можливо, завелике — до 5 МБ).";
+        }
+    }
+
+    private async Task OnDiagramImageClick(MouseEventArgs e)
+    {
+        if (editing is null || dragModule is null)
+        {
+            return;
+        }
+
+        var point = await dragModule.InvokeAsync<double[]>("relativePercent", diagramImageRef, e.ClientX, e.ClientY);
+        editing.Hotspots.Add(new HotspotDraft { X = Math.Round(point[0], 1), Y = Math.Round(point[1], 1), Label = string.Empty });
+    }
+
+    private void CommitQuestion()
+    {
+        if (editing is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(editing.Text))
+        {
+            questionError = "Впиши текст питання.";
+            return;
+        }
+
+        if (isNewQuestion)
+        {
+            questions.Add(editing);
+        }
+        else
+        {
+            var index = questions.FindIndex(q => q.Id == editing.Id);
+            if (index >= 0)
+            {
+                questions[index] = editing;
+            }
+        }
+
+        editing = null;
+        questionError = null;
+    }
+
+    private async Task SaveTestAsync()
+    {
+        saveMessage = null;
+        saveErrors = null;
+        saving = true;
+        try
+        {
+            var model = new TestDefinitionModel(title, subject, grade, null, questions.Select(q => q.ToQuestion()).ToArray());
+            var json = TestDefinitionParser.ToJson(model);
+            var validated = TestDefinitionParser.Parse(json); // surfaces the same validation teachers see on JSON upload
+
+            if (savedId is { } id)
+            {
+                await TestStore.UpdateAsync(id, validated, json);
+            }
+            else
+            {
+                var saved = await TestStore.SaveAsync(validated, json);
+                savedId = saved.Id;
+                Navigation.NavigateTo($"teacher/builder/{saved.Id:N}", replace: true);
+                return;
+            }
+
+            saveMessage = "Збережено.";
+        }
+        catch (TestDefinitionValidationException validation)
+        {
+            saveErrors = validation.Errors;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not save the test definition.");
+            saveErrors = ["Не вдалося зберегти тест."];
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (dragModule is not null)
+        {
+            try
+            {
+                await dragModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+
+    private sealed class QuestionDraft
+    {
+        public string Id = Guid.NewGuid().ToString("N")[..8];
+        public QuestionType Type = QuestionType.Single;
+        public string Text = string.Empty;
+        public int? Seconds;
+        public string? ImageSrc;
+        public string? ImageAlt;
+        public List<string> Options = [];
+        public HashSet<int> AnswerKey = [];
+        public List<string> Labels = [];
+        public List<int> MatchKey = [];
+        public List<string> OrderItems = [];
+        public string BlankAnswer = string.Empty;
+        public List<HotspotDraft> Hotspots = [];
+
+        public static QuestionDraft FromQuestion(TestQuestion question)
+        {
+            var draft = new QuestionDraft
+            {
+                Id = question.Id,
+                Type = question.Type,
+                Text = question.Text,
+                Seconds = question.Seconds,
+                ImageSrc = question.Image?.Src,
+                ImageAlt = question.Image?.Alt,
+                Options = (question.Options ?? []).ToList(),
+                Labels = (question.Labels ?? []).ToList(),
+                BlankAnswer = question.BlankAnswer ?? string.Empty,
+                AnswerKey = (question.AnswerKey ?? []).ToHashSet(),
+                MatchKey = (question.MatchKey ?? []).ToList(),
+                Hotspots = (question.Hotspots ?? []).Select(h => new HotspotDraft { X = h.X, Y = h.Y, Label = h.Label }).ToList()
+            };
+
+            if (question.Type == QuestionType.Order)
+            {
+                var key = question.OrderKey ?? [];
+                draft.OrderItems = key.Select(optionIndex =>
+                    optionIndex >= 0 && optionIndex < draft.Options.Count ? draft.Options[optionIndex] : string.Empty).ToList();
+            }
+
+            return draft;
+        }
+
+        public QuestionDraft Clone() => new()
+        {
+            Id = Id,
+            Type = Type,
+            Text = Text,
+            Seconds = Seconds,
+            ImageSrc = ImageSrc,
+            ImageAlt = ImageAlt,
+            Options = [..Options],
+            AnswerKey = [..AnswerKey],
+            Labels = [..Labels],
+            MatchKey = [..MatchKey],
+            OrderItems = [..OrderItems],
+            BlankAnswer = BlankAnswer,
+            Hotspots = Hotspots.Select(h => new HotspotDraft { X = h.X, Y = h.Y, Label = h.Label }).ToList()
+        };
+
+        public TestQuestion ToQuestion()
+        {
+            TestImage? image = ImageSrc is { Length: > 0 } src
+                ? new TestImage(src, string.IsNullOrWhiteSpace(ImageAlt) ? Text : ImageAlt)
+                : null;
+
+            return Type switch
+            {
+                QuestionType.Single or QuestionType.Multiple => new TestQuestion(Id, Type, Text, Seconds, image,
+                    Options: Options.ToArray(), AnswerKey: AnswerKey.Order().ToArray()),
+
+                QuestionType.Blank => new TestQuestion(Id, Type, Text, Seconds, image, BlankAnswer: BlankAnswer),
+
+                QuestionType.Explanation => new TestQuestion(Id, Type, Text, Seconds, image),
+
+                QuestionType.Match => new TestQuestion(Id, Type, Text, Seconds, image,
+                    Options: Options.ToArray(), Labels: Labels.ToArray(), MatchKey: MatchKey.ToArray()),
+
+                QuestionType.Order => BuildOrderQuestion(image),
+
+                QuestionType.DiagramLabel => new TestQuestion(Id, Type, Text, Seconds, image,
+                    Options: Hotspots.Select(h => h.Label).ToArray(),
+                    Hotspots: Hotspots.Select((h, i) => new TestHotspot($"h{i}", h.X, h.Y, h.Label)).ToArray()),
+
+                _ => throw new InvalidOperationException($"Unknown question type {Type}.")
+            };
+        }
+
+        private TestQuestion BuildOrderQuestion(TestImage? image)
+        {
+            var count = OrderItems.Count;
+            var shuffledSlots = Enumerable.Range(0, count).ToArray();
+            Random.Shared.Shuffle(shuffledSlots);
+
+            var options = new string[count];
+            var orderKey = new int[count];
+            for (var originalPosition = 0; originalPosition < count; originalPosition++)
+            {
+                var slot = shuffledSlots[originalPosition];
+                options[slot] = OrderItems[originalPosition];
+                orderKey[originalPosition] = slot;
+            }
+
+            return new TestQuestion(Id, Type, Text, Seconds, image, Options: options, OrderKey: orderKey);
+        }
+    }
+
+    private sealed class HotspotDraft
+    {
+        public double X;
+        public double Y;
+        public string Label = string.Empty;
+    }
+}

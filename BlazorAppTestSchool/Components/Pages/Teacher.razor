@@ -8,7 +8,6 @@
 @using static BlazorAppTestSchool.Data.BiologyAttemptReport
 @inject BiologyAttemptStore AttemptStore
 @inject TestDefinitionStore TestStore
-@inject TestImageStore ImageStore
 @inject ILogger<Teacher> Logger
 
 @if (Preview)
@@ -30,7 +29,7 @@ else
 {
     <PageTitle>Вчитель | Шкільна лабораторія</PageTitle>
 
-    <section class="school-lab" aria-labelledby="teacher-heading">
+    <section class="school-lab school-lab-wide" aria-labelledby="teacher-heading">
         <h1 id="teacher-heading">Сторінка вчителя</h1>
 
         @if (message is not null)
@@ -48,6 +47,10 @@ else
                     </a>
                 </div>
                 <h2 id="report-heading" class="h4">@result.StudentName · @result.Grade клас</h2>
+                @if (result.TestTitle is { Length: > 0 } variant)
+                {
+                    <p class="school-lab-subject">@variant</p>
+                }
                 @if (result.Questions.Any(question => question.Points is null))
                 {
                     <p>Попередня оцінка: <strong>@result.Score з @result.Questions.Length</strong>.
@@ -83,10 +86,15 @@ else
         else
         {
             <section class="teacher-tests mb-4" aria-labelledby="tests-heading">
-                <h2 id="tests-heading" class="h4">Тести</h2>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h2 id="tests-heading" class="h4 mb-0">Тести</h2>
+                    <a class="btn btn-primary btn-sm" href="teacher/builder">+ Новий тест (конструктор)</a>
+                </div>
                 <p>
-                    Завантаж файл тесту у форматі JSON за
+                    Створи тест конструктором вище або завантаж файл у форматі JSON за
                     <a href="test-template.json" data-enhance-nav="false">стандартом (шаблон)</a>.
+                    Можна тримати кілька активних тестів для одного класу одночасно (наприклад, "Варіант 1" і
+                    "Варіант 2") — учень сам побачить вибір варіантів.
                 </p>
                 <div class="teacher-upload">
                     <InputFile OnChange="OnFileSelectedAsync" accept=".json" class="form-control" />
@@ -125,61 +133,29 @@ else
                                         <td>@test.Title</td>
                                         <td>@test.Subject @(test.Grade is { } g ? $"· {g} клас" : null)</td>
                                         <td>@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                        <td>
+                                        <td class="d-flex align-items-center gap-2">
                                             @if (test.IsActive)
                                             {
                                                 <span class="badge text-bg-success">Активний</span>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => DeactivateAsync(test.Id)">
+                                                    Деактивувати
+                                                </button>
                                             }
                                             else
                                             {
                                                 <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ActivateAsync(test.Id)">
-                                                    Зробити активним
+                                                    Активувати
                                                 </button>
                                             }
                                         </td>
-                                        <td><a href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a></td>
+                                        <td class="d-flex gap-2">
+                                            <a href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
+                                            <a href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
+                                        </td>
                                     </tr>
                                 }
                             </tbody>
                         </table>
-                    </div>
-                }
-            </section>
-
-            <section class="teacher-tests mb-4" aria-labelledby="images-heading">
-                <h2 id="images-heading" class="h4">Зображення для завдань</h2>
-                <p>
-                    Завантаж картинку (PNG, JPG, GIF або WEBP), скопіюй її шлях і встав у поле
-                    <code>image.src</code> або <code>hotspots</code> у файлі тесту — так вона з'явиться в завданні.
-                </p>
-                <div class="teacher-upload">
-                    <InputFile OnChange="OnImageSelectedAsync" accept="image/png,image/jpeg,image/gif,image/webp" class="form-control" />
-                </div>
-                @if (imageError is not null)
-                {
-                    <p class="text-danger mt-2" role="alert">@imageError</p>
-                }
-                else if (imageSuccess is not null)
-                {
-                    <p class="text-success mt-2" role="status">@imageSuccess</p>
-                }
-
-                @if (uploadedImages.Length > 0)
-                {
-                    <div class="teacher-image-gallery mt-3">
-                        @foreach (var path in uploadedImages)
-                        {
-                            <figure class="teacher-image-card" @key="path">
-                                <img src="@path" alt="" loading="lazy" />
-                                <figcaption>
-                                    <input class="form-control form-control-sm" value="@path" readonly
-                                           onfocus="this.select()" aria-label="Шлях до зображення" />
-                                    <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => DeleteImageAsync(path)">
-                                        Видалити
-                                    </button>
-                                </figcaption>
-                            </figure>
-                        }
                     </div>
                 }
             </section>
@@ -197,6 +173,7 @@ else
                             <tr>
                                 <th scope="col">Учень</th>
                                 <th scope="col">Клас</th>
+                                <th scope="col">Варіант</th>
                                 <th scope="col">Оцінка</th>
                                 <th scope="col">Час</th>
                                 <th scope="col">Здано</th>
@@ -208,6 +185,7 @@ else
                                 <tr>
                                     <th scope="row"><a href="@ReportUrl(item.Id)">@item.StudentName</a></th>
                                     <td>@item.Grade</td>
+                                    <td>@(item.TestTitle ?? "—")</td>
                                     <td>
                                         @item.Score з @item.MaxScore
                                         @if (item.PendingReview)
@@ -254,9 +232,6 @@ else
     private string? message;
     private string? uploadSuccess;
     private string[]? uploadError;
-    private string[] uploadedImages = [];
-    private string? imageSuccess;
-    private string? imageError;
     private bool hasMore;
     private int CurrentPage => int.TryParse(PageNumber, out var page) && page is > 0 and <= int.MaxValue / BiologyAttemptStore.PageSize ? page : 1;
 
@@ -281,7 +256,6 @@ else
             {
                 (attempts, hasMore) = await AttemptStore.ListAsync(CurrentPage, CancellationToken.None);
                 uploadedTests = await TestStore.ListAsync();
-                uploadedImages = ImageStore.List();
                 return;
             }
 
@@ -331,35 +305,10 @@ else
         uploadedTests = await TestStore.ListAsync();
     }
 
-    private async Task OnImageSelectedAsync(InputFileChangeEventArgs e)
+    private async Task DeactivateAsync(Guid id)
     {
-        imageError = null;
-        imageSuccess = null;
-        try
-        {
-            if (!TestImageStore.IsAllowedExtension(e.File.Name))
-            {
-                imageError = "Дозволені лише зображення: PNG, JPG, GIF, WEBP.";
-                return;
-            }
-
-            await using var stream = e.File.OpenReadStream(maxAllowedSize: 5_000_000);
-            var path = await ImageStore.SaveAsync(stream, e.File.Name);
-            imageSuccess = $"Завантажено: {path}";
-            uploadedImages = ImageStore.List();
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(exception, "Could not upload a test image.");
-            imageError = "Не вдалося завантажити зображення (можливо, завелике — до 5 МБ).";
-        }
-    }
-
-    private Task DeleteImageAsync(string path)
-    {
-        ImageStore.Delete(path);
-        uploadedImages = ImageStore.List();
-        return Task.CompletedTask;
+        await TestStore.DeactivateAsync(id);
+        uploadedTests = await TestStore.ListAsync();
     }
 
     private static string ListUrl(int page) => page <= 1 ? "teacher" : $"teacher?page={page}";

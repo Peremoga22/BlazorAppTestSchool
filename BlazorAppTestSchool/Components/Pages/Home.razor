@@ -134,7 +134,8 @@ else
     private async Task CheckActiveTestAsync(BiologyProfile participant)
     {
         testCheckDone = false;
-        hasActiveTest = await TestStore.GetActiveAsync(BiologySeed.Subject, participant.Grade) is not null;
+        var activeTests = await TestStore.ListActiveAsync(BiologySeed.Subject, participant.Grade);
+        hasActiveTest = activeTests.Length > 0;
         testCheckDone = true;
         StateHasChanged();
     }

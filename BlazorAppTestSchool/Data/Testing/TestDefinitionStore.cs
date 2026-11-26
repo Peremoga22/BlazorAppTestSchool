@@ -9,20 +9,13 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var subject = model.Subject.Trim();
-        var previouslyActive = await database.TestDefinitions
-            .Where(test => test.IsActive && test.Subject == subject && test.Grade == model.Grade)
-            .ToListAsync(cancellationToken);
-        foreach (var test in previouslyActive)
-        {
-            test.IsActive = false;
-        }
-
+        // Several tests can be active for the same subject/grade at once (e.g. "Варіант 1" / "Варіант 2"),
+        // so saving one does not deactivate the others — teachers toggle each test's availability explicitly.
         var entity = new TestDefinitionEntity
         {
             Id = Guid.NewGuid(),
             Title = model.Title.Trim(),
-            Subject = subject,
+            Subject = model.Subject.Trim(),
             Grade = model.Grade,
             UploadedAt = DateTimeOffset.UtcNow,
             IsActive = true,
@@ -34,6 +27,7 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
         return ToSummary(entity);
     }
 
+    /// <summary>The single most-recently-activated test for a subject/grade, for the common case of one variant.</summary>
     public async Task<TestDefinitionModel?> GetActiveAsync(string subject, int? grade, CancellationToken cancellationToken = default)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -45,6 +39,36 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
             .FirstOrDefaultAsync(cancellationToken);
 
         return json is null ? null : TestDefinitionParser.Parse(json);
+    }
+
+    /// <summary>All tests currently active for a subject/grade, so a student can be offered a choice of variants.</summary>
+    public async Task<TestDefinitionSummary[]> ListActiveAsync(string subject, int? grade, CancellationToken cancellationToken = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var entities = await database.TestDefinitions.AsNoTracking()
+            .Where(test => test.IsActive && test.Subject == subject && test.Grade == grade)
+            .OrderBy(test => test.UploadedAt)
+            .ToArrayAsync(cancellationToken);
+
+        return entities.Select(ToSummary).ToArray();
+    }
+
+    public async Task UpdateAsync(Guid id, TestDefinitionModel model, string json, CancellationToken cancellationToken = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var entity = await database.TestDefinitions.SingleOrDefaultAsync(test => test.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.Title = model.Title.Trim();
+        entity.Subject = model.Subject.Trim();
+        entity.Grade = model.Grade;
+        entity.DefinitionJson = json;
+        await database.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<TestDefinitionModel?> GetAsync(Guid id, CancellationToken cancellationToken = default)
@@ -70,7 +94,13 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
         return entities.Select(ToSummary).ToArray();
     }
 
-    public async Task ActivateAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task ActivateAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await SetActiveAsync(id, true, cancellationToken);
+
+    public async Task DeactivateAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await SetActiveAsync(id, false, cancellationToken);
+
+    private async Task SetActiveAsync(Guid id, bool isActive, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -80,15 +110,7 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
             return;
         }
 
-        var siblings = await database.TestDefinitions
-            .Where(test => test.IsActive && test.Subject == target.Subject && test.Grade == target.Grade && test.Id != id)
-            .ToListAsync(cancellationToken);
-        foreach (var sibling in siblings)
-        {
-            sibling.IsActive = false;
-        }
-
-        target.IsActive = true;
+        target.IsActive = isActive;
         await database.SaveChangesAsync(cancellationToken);
     }
 

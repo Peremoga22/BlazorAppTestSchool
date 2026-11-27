@@ -1,5 +1,7 @@
+@using BlazorAppTestSchool.Data.Testing
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @inject ProtectedSessionStorage ProfileStorage
+@inject TestDefinitionStore TestStore
 @inject NavigationManager Navigation
 
 <form @onsubmit="StartTestAsync" @onsubmit:preventDefault class="student-entry">
@@ -15,19 +17,40 @@
     <input id="student-entry-patronymic" class="form-control mb-3" @bind="patronymic" @bind:event="oninput"
            maxlength="80" required autocomplete="additional-name" />
 
-    <label class="form-label" for="student-entry-grade">Клас</label>
-    <select id="student-entry-grade" class="form-select mb-3" @bind="grade" required>
-        <option value="">Обери клас</option>
-        <option value="7">7 клас</option>
-        <option value="11">11 клас</option>
-    </select>
+    @if (!offeringsReady)
+    {
+        <p role="status">Шукаємо предмети і класи…</p>
+    }
+    else if (offerings.Length == 0)
+    {
+        <p>Учитель ще не додав жодної контрольної. Предмет і клас з’являться, коли в папці буде тест.</p>
+    }
+    else
+    {
+        <label class="form-label" for="student-entry-subject">Предмет</label>
+        <select id="student-entry-subject" class="form-select mb-3" @bind="subject" @bind:after="SyncGradeToSubject" required>
+            <option value="">Обери предмет</option>
+            @foreach (var offering in offerings)
+            {
+                <option value="@offering.Subject">@offering.Subject</option>
+            }
+        </select>
+        <label class="form-label" for="student-entry-grade">Клас</label>
+        <select id="student-entry-grade" class="form-select mb-3" @bind="grade" required disabled="@(GradesForSubject.Length == 0)">
+            <option value="">Обери клас</option>
+            @foreach (var offeringGrade in GradesForSubject)
+            {
+                <option value="@offeringGrade">@offeringGrade клас</option>
+            }
+        </select>
+    }
 
     @if (error is not null)
     {
         <p class="text-danger" role="alert">@error</p>
     }
 
-    <button class="w-100 btn btn-lg btn-primary" disabled="@saving">
+    <button class="w-100 btn btn-lg btn-primary" disabled="@(saving || !offeringsReady || offerings.Length == 0)">
         @(saving ? "Відкриваємо тест…" : "Почати тест")
     </button>
 </form>
@@ -36,9 +59,58 @@
     private string lastName = string.Empty;
     private string firstName = string.Empty;
     private string patronymic = string.Empty;
+    private string subject = string.Empty;
     private int? grade;
+    private SubjectOffering[] offerings = [];
+    private bool offeringsReady;
     private string? error;
     private bool saving;
+
+    private int[] GradesForSubject =>
+        offerings.FirstOrDefault(offering => string.Equals(offering.Subject, subject, StringComparison.CurrentCultureIgnoreCase))?.Grades ?? [];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            offerings = await TestStore.ListOfferingsAsync();
+            if (offerings.Length == 1)
+            {
+                subject = offerings[0].Subject;
+            }
+
+            SyncGradeToSubject();
+        }
+        catch (Exception)
+        {
+            error = "Не вдалося завантажити предмети. Онови сторінку.";
+        }
+        finally
+        {
+            offeringsReady = true;
+            StateHasChanged();
+        }
+    }
+
+    private void SyncGradeToSubject()
+    {
+        var grades = GradesForSubject;
+        if (grades.Length == 1)
+        {
+            grade = grades[0];
+            return;
+        }
+
+        if (grade is int chosen && !grades.Contains(chosen))
+        {
+            grade = null;
+        }
+    }
 
     private async Task StartTestAsync()
     {
@@ -47,10 +119,13 @@
             return;
         }
 
-        var candidate = new BiologyProfile(lastName.Trim(), firstName.Trim(), patronymic.Trim(), grade ?? 0);
-        if (!candidate.IsValid)
+        var candidate = new BiologyProfile(lastName.Trim(), firstName.Trim(), patronymic.Trim(), grade ?? 0)
         {
-            error = "Введи прізвище, ім’я, по батькові та обери клас.";
+            Subject = subject.Trim()
+        };
+        if (!candidate.IsValid || !GradesForSubject.Contains(candidate.Grade))
+        {
+            error = "Введи прізвище, ім’я, по батькові та обери предмет і клас.";
             return;
         }
 

@@ -37,17 +37,38 @@ else if (profile is not { } participant)
                    maxlength="80" required autocomplete="given-name" />
             <label for="student-patronymic" class="form-label">По батькові</label>
             <input id="student-patronymic" class="form-control mb-3" @bind="patronymic" maxlength="80" required />
-            <label for="student-grade" class="form-label">Клас</label>
-            <select id="student-grade" class="form-select mb-3" @bind="grade" required>
-                <option value="">Обери клас</option>
-                <option value="7">7 клас</option>
-                <option value="11">11 клас</option>
-            </select>
+            @if (!offeringsReady)
+            {
+                <p role="status">Шукаємо предмети і класи…</p>
+            }
+            else if (offerings.Length == 0)
+            {
+                <p>Учитель ще не додав жодної контрольної. Предмет і клас з’являться тут, коли в папці буде тест.</p>
+            }
+            else
+            {
+                <label for="student-subject" class="form-label">Предмет</label>
+                <select id="student-subject" class="form-select mb-3" @bind="subject" @bind:after="SyncGradeToSubject" required>
+                    <option value="">Обери предмет</option>
+                    @foreach (var offering in offerings)
+                    {
+                        <option value="@offering.Subject">@offering.Subject</option>
+                    }
+                </select>
+                <label for="student-grade" class="form-label">Клас</label>
+                <select id="student-grade" class="form-select mb-3" @bind="grade" required disabled="@(GradesForSubject.Length == 0)">
+                    <option value="">Обери клас</option>
+                    @foreach (var offeringGrade in GradesForSubject)
+                    {
+                        <option value="@offeringGrade">@offeringGrade клас</option>
+                    }
+                </select>
+            }
             @if (profileError is not null)
             {
                 <p class="text-danger" role="alert">@profileError</p>
             }
-            <button class="btn btn-primary" disabled="@savingProfile">Продовжити</button>
+            <button class="btn btn-primary" disabled="@(savingProfile || !offeringsReady || offerings.Length == 0)">Продовжити</button>
         </form>
     </section>
 }
@@ -67,19 +88,19 @@ else
         {
             <h1 id="test-heading">Контрольну вже здано</h1>
             <p class="mb-0">
-                Прізвище @participant.LastName вже є серед робіт @participant.Grade класу,
+                Прізвище @participant.LastName вже є серед робіт з предмета @participant.Subject (@participant.Grade клас),
                 тож пройти тест ще раз не можна. Коли вчитель натисне «Апрувнути», онови сторінку.
             </p>
         }
         else if (!hasActiveTest)
         {
-            <h1 id="test-heading">Контрольна для @participant.Grade класу</h1>
+            <h1 id="test-heading">@participant.Subject, @participant.Grade клас</h1>
             <p class="mb-0">Завдання ще готуються.</p>
         }
         else
         {
-            <p class="school-lab-subject">Біологія · @participant.Grade клас</p>
-            <h1 id="test-heading" class="mb-3">Вітаємо на контрольній з біології!</h1>
+            <p class="school-lab-subject">@participant.Subject · @participant.Grade клас</p>
+            <h1 id="test-heading" class="mb-3">Вітаємо на контрольній!</h1>
             <p class="mb-4">
                 На тебе чекає кілька завдань різних типів, і на кожне буде від 1 до 3 хвилин залежно від його типу.
                 Працюй самостійно, без копіювання завдань, вставлення готових відповідей і допомоги ChatGPT чи інших сервісів ШІ.
@@ -129,7 +150,10 @@ else
     private string lastName = string.Empty;
     private string firstName = string.Empty;
     private string patronymic = string.Empty;
+    private string subject = string.Empty;
     private int? grade;
+    private SubjectOffering[] offerings = [];
+    private bool offeringsReady;
     private string? profileError;
     private bool profileReady;
     private bool savingProfile;
@@ -149,6 +173,10 @@ else
             profileReady = true;
             StateHasChanged();
 
+            offerings = await TestStore.ListOfferingsAsync();
+            offeringsReady = true;
+            ApplySingleOffering();
+            StateHasChanged();
             if (profile is { } participant)
             {
                 await CheckActiveTestAsync(participant);
@@ -166,9 +194,9 @@ else
     private async Task CheckActiveTestAsync(BiologyProfile participant)
     {
         testCheckDone = false;
-        var activeTests = await TestStore.ListActiveAsync(BiologySeed.Subject, participant.Grade);
+        var activeTests = await TestStore.ListActiveAsync(participant.Subject, participant.Grade);
         hasActiveTest = activeTests.Length > 0;
-        canStart = await AttemptStore.CanStartAsync(participant.LastName, participant.Grade);
+        canStart = await AttemptStore.CanStartAsync(participant.LastName, participant.Grade, participant.Subject);
         testCheckDone = true;
         StateHasChanged();
     }
@@ -180,10 +208,13 @@ else
             return;
         }
 
-        var candidate = new BiologyProfile(lastName.Trim(), firstName.Trim(), patronymic.Trim(), grade ?? 0);
-        if (!candidate.IsValid)
+        var candidate = new BiologyProfile(lastName.Trim(), firstName.Trim(), patronymic.Trim(), grade ?? 0)
         {
-            profileError = "Введи прізвище, ім’я, по батькові та обери клас.";
+            Subject = subject.Trim()
+        };
+        if (!candidate.IsValid || !GradesForSubject.Contains(candidate.Grade))
+        {
+            profileError = "Введи прізвище, ім’я, по батькові та обери предмет і клас.";
             return;
         }
 
@@ -216,12 +247,42 @@ else
             lastName = profile?.LastName ?? string.Empty;
             firstName = profile?.FirstName ?? string.Empty;
             patronymic = profile?.Patronymic ?? string.Empty;
+            subject = profile?.Subject ?? string.Empty;
             grade = profile?.Grade;
             profile = null;
+            SyncGradeToSubject();
         }
         finally
         {
             savingProfile = false;
+        }
+    }
+
+    private int[] GradesForSubject =>
+        offerings.FirstOrDefault(offering => string.Equals(offering.Subject, subject, StringComparison.CurrentCultureIgnoreCase))?.Grades ?? [];
+
+    private void ApplySingleOffering()
+    {
+        if (offerings.Length == 1 && string.IsNullOrWhiteSpace(subject))
+        {
+            subject = offerings[0].Subject;
+        }
+
+        SyncGradeToSubject();
+    }
+
+    private void SyncGradeToSubject()
+    {
+        var grades = GradesForSubject;
+        if (grades.Length == 1)
+        {
+            grade = grades[0];
+            return;
+        }
+
+        if (grade is int chosen && !grades.Contains(chosen))
+        {
+            grade = null;
         }
     }
 }

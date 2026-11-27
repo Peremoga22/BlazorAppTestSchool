@@ -135,6 +135,26 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
         await database.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>Subjects and grades that already have a test, so the student form is not a fixed list.</summary>
+    public async Task<SubjectOffering[]> ListOfferingsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var rows = await database.TestDefinitions.AsNoTracking()
+            .Where(test => test.Grade != null)
+            .Select(test => new { test.Subject, Grade = test.Grade!.Value })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Where(row => !string.IsNullOrWhiteSpace(row.Subject))
+            .GroupBy(row => row.Subject.Trim(), StringComparer.CurrentCultureIgnoreCase)
+            .Select(group => new SubjectOffering(
+                group.First().Subject.Trim(),
+                group.Select(row => row.Grade).Distinct().OrderBy(grade => grade).ToArray()))
+            .OrderBy(offering => offering.Subject, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
     public async Task<bool> HasAnyAsync(CancellationToken cancellationToken = default)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -147,3 +167,5 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
 }
 
 public sealed record TestDefinitionSummary(Guid Id, string Title, string Subject, int? Grade, DateTimeOffset UploadedAt, bool IsActive, Guid? FolderId);
+
+public sealed record SubjectOffering(string Subject, int[] Grades);

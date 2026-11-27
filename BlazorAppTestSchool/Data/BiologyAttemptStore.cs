@@ -37,10 +37,10 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
     }
 
     /// <summary>
-    /// A surname that already has a submitted paper in this grade cannot start again
-    /// unless the teacher has an unused approval.
+    /// A surname that already submitted this subject in this grade cannot start again
+    /// unless the teacher has an unused approval. Without a subject, any paper in the grade blocks a start.
     /// </summary>
-    public async Task<bool> CanStartAsync(string lastName, int grade, CancellationToken cancellationToken = default)
+    public async Task<bool> CanStartAsync(string lastName, int grade, string? subject = null, CancellationToken cancellationToken = default)
     {
         var key = NormalizeLastName(lastName);
         if (key.Length == 0)
@@ -50,7 +50,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var taken = await HasSubmittedAsync(database, key, grade, cancellationToken);
+        var taken = await HasSubmittedAsync(database, key, grade, subject, cancellationToken);
         if (!taken)
         {
             return true;
@@ -122,7 +122,16 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
         }
 
         var key = NormalizeLastName(LastNameOf(report));
-        var taken = key.Length > 0 && await HasSubmittedAsync(database, key, report.Grade, CancellationToken.None);
+        string? subject = null;
+        if (report.TestId is Guid testId)
+        {
+            subject = await database.TestDefinitions.AsNoTracking()
+                .Where(test => test.Id == testId)
+                .Select(test => test.Subject)
+                .FirstOrDefaultAsync();
+        }
+
+        var taken = key.Length > 0 && await HasSubmittedAsync(database, key, report.Grade, subject, CancellationToken.None);
         if (taken)
         {
             var grant = await database.BiologyRetakeApprovals
@@ -185,26 +194,47 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
     }
 
     private async Task<bool> HasSubmittedAsync(
-        ApplicationDbContext database, string lastNameKey, int grade, CancellationToken cancellationToken)
+        ApplicationDbContext database, string lastNameKey, int grade, string? subject, CancellationToken cancellationToken)
     {
         var rows = await database.BiologyAttempts.AsNoTracking()
             .Where(attempt => attempt.Grade == grade)
             .Select(attempt => new { attempt.StudentName, attempt.ReportJson })
             .ToListAsync(cancellationToken);
 
+        var matchSubject = !string.IsNullOrWhiteSpace(subject);
+        var catalog = matchSubject
+            ? await database.TestDefinitions.AsNoTracking()
+                .Select(test => new TestDefinitionSummary(
+                    test.Id, test.Title, test.Subject, test.Grade, test.UploadedAt, test.IsActive, test.FolderId))
+                .ToArrayAsync(cancellationToken)
+            : [];
+
         foreach (var row in rows)
         {
-            if (!TryRead(row.ReportJson, out var report))
+            var parsed = TryRead(row.ReportJson, out var report);
+            var rowKey = parsed
+                ? NormalizeLastName(LastNameOf(report))
+                : NormalizeLastName(FirstWord(row.StudentName));
+            if (rowKey != lastNameKey)
             {
-                if (NormalizeLastName(FirstWord(row.StudentName)) == lastNameKey)
-                {
-                    return true;
-                }
-
                 continue;
             }
 
-            if (NormalizeLastName(LastNameOf(report)) == lastNameKey)
+            if (!matchSubject)
+            {
+                return true;
+            }
+
+            if (!parsed)
+            {
+                continue;
+            }
+
+            var owner = AttemptFolderLink.OwningTestId(report.TestId, report.TestTitle, report.Grade, catalog);
+            var test = owner is Guid id ? catalog.FirstOrDefault(item => item.Id == id) : null;
+            if (test is not null
+                && test.Grade == grade
+                && string.Equals(test.Subject.Trim(), subject!.Trim(), StringComparison.CurrentCultureIgnoreCase))
             {
                 return true;
             }

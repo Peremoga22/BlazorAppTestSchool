@@ -24,7 +24,7 @@
                     <span class="lab-navbar-avatar" aria-hidden="true">@AvatarLetter(pupil.LastName)</span>
                     <span class="lab-navbar-student-text">
                         <span class="lab-navbar-student-name">@pupil.LastName</span>
-                        <span class="lab-navbar-student-grade">@pupil.Grade клас</span>
+                        <span class="lab-navbar-student-grade">@(string.IsNullOrWhiteSpace(pupil.Subject) ? $"{pupil.Grade} клас" : $"{pupil.Subject} · {pupil.Grade} клас")</span>
                     </span>
                 </div>
             }

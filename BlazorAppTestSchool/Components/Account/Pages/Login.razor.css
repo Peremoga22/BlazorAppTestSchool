@@ -57,21 +57,21 @@
     }
 
     .entry-lead {
-        margin-bottom: .55rem;
-        font-size: .92rem;
-        line-height: 1.35;
+        margin-bottom: .4rem;
+        font-size: .9rem;
+        line-height: 1.3;
     }
 
     ::deep .student-entry .form-label {
-        margin-bottom: .15rem;
-        font-size: .9rem;
+        margin-bottom: .1rem;
+        font-size: .88rem;
     }
 
     ::deep .student-entry .form-control,
     ::deep .student-entry .form-select {
-        padding-top: .4rem;
-        padding-bottom: .4rem;
-        margin-bottom: .5rem !important;
+        padding-top: .35rem;
+        padding-bottom: .35rem;
+        margin-bottom: .4rem !important;
     }
 
     ::deep .student-entry .btn-lg {
@@ -86,8 +86,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: .75rem;
-    padding: 2.5rem 1.75rem;
+    gap: .55rem;
+    padding: 1.45rem 1.35rem;
     text-align: center;
     color: white;
     background: linear-gradient(160deg, var(--brand-900), var(--brand-600));
@@ -97,8 +97,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 4rem;
-    height: 4rem;
+    width: 3.1rem;
+    height: 3.1rem;
     border-radius: 50%;
     background: rgb(255 255 255 / 15%);
 }
@@ -123,7 +123,7 @@
 }
 
 .auth-form {
-    padding: 2.25rem 2rem;
+    padding: 1.35rem 1.35rem 1.2rem;
 }
 
 .auth-form-heading {
@@ -206,19 +206,21 @@
     display: block;
 }
 
-.auth-field {
+.auth-field-control {
     position: relative;
 }
 
-.auth-field .form-control {
-    padding-left: 2.5rem;
+::deep .auth-field-control .form-control {
+    padding-left: 2.55rem;
 }
 
 .auth-field-icon {
     position: absolute;
     left: .8rem;
-    top: 2.35rem;
+    top: 50%;
+    z-index: 1;
     display: flex;
+    transform: translateY(-50%);
     color: var(--ink-soft);
     pointer-events: none;
 }
@@ -228,14 +230,14 @@
     height: 1.1rem;
 }
 
-.auth-password-input {
-    padding-right: 2.5rem;
+::deep .auth-password-input {
+    padding-right: 2.55rem;
 }
 
 .auth-password-toggle {
     position: absolute;
-    right: .6rem;
-    top: 2.3rem;
+    right: .45rem;
+    top: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -243,6 +245,7 @@
     height: 1.8rem;
     border: none;
     background: none;
+    transform: translateY(-50%);
     color: var(--ink-soft);
     cursor: pointer;
 }

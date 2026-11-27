@@ -9,7 +9,6 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
 @inject ILogger<Login> Logger
-@inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
 <PageTitle>Вхід | Система оцінювання учнів</PageTitle>
@@ -50,31 +49,35 @@
 
             <div class="auth-field mb-3">
                 <label for="Input.Email" class="form-label">Логін</label>
-                <span class="auth-field-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9ZM4 20.5c0-3.59 3.58-6.5 8-6.5s8 2.91 8 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                </span>
-                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username webauthn" aria-required="true" placeholder="name@example.com" />
+                <div class="auth-field-control">
+                    <span class="auth-field-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9ZM4 20.5c0-3.59 3.58-6.5 8-6.5s8 2.91 8 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </span>
+                    <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username webauthn" aria-required="true" />
+                </div>
                 <ValidationMessage For="() => Input.Email" class="text-danger" />
             </div>
 
             <div class="auth-field mb-2">
                 <label for="Input.Password" class="form-label">Пароль</label>
-                <span class="auth-field-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="5" y="10.5" width="14" height="9.5" rx="1.6" stroke="currentColor" stroke-width="1.6" />
-                        <path d="M8 10.5V7.5a4 4 0 1 1 8 0v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-                    </svg>
-                </span>
-                <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control auth-password-input" autocomplete="current-password" aria-required="true" placeholder="пароль" />
-                <button type="button" class="auth-password-toggle" aria-label="Показати чи приховати пароль"
-                        onclick="const i=this.parentElement.querySelector('input'); i.type = i.type==='password' ? 'text' : 'password';">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6" />
-                    </svg>
-                </button>
+                <div class="auth-field-control">
+                    <span class="auth-field-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="5" y="10.5" width="14" height="9.5" rx="1.6" stroke="currentColor" stroke-width="1.6" />
+                            <path d="M8 10.5V7.5a4 4 0 1 1 8 0v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                        </svg>
+                    </span>
+                    <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control auth-password-input" autocomplete="current-password" aria-required="true" />
+                    <button type="button" class="auth-password-toggle" aria-label="Показати чи приховати пароль"
+                            onclick="const i=this.parentElement.querySelector('input'); i.type = i.type==='password' ? 'text' : 'password';">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6" />
+                        </svg>
+                    </button>
+                </div>
                 <ValidationMessage For="() => Input.Password" class="text-danger" />
             </div>
 
@@ -84,16 +87,6 @@
             </div>
 
             <button type="submit" class="w-100 btn btn-lg btn-primary">Увійти</button>
-
-            <div class="d-flex flex-column align-items-center mt-3">
-                <PasskeySubmit Operation="PasskeyOperation.Request" Name="Input.Passkey" EmailName="Input.Email" class="btn btn-link">Увійти за допомогою passkey</PasskeySubmit>
-            </div>
-
-            <div class="auth-links">
-                <a href="Account/ForgotPassword">Забули пароль?</a>
-                <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Зареєструватися</a>
-                <a href="Account/ResendEmailConfirmation">Надіслати підтвердження email ще раз</a>
-            </div>
         </EditForm>
             </div>
         </div>

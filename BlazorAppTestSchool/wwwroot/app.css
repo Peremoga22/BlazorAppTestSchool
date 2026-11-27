@@ -244,14 +244,100 @@ h1:focus {
 /* ===== App shell (student + teacher pages) ================================ */
 .biology-shell {
     min-height: 100vh;
-    padding: clamp(1rem, 5vw, 4rem) 1rem;
-    background: var(--surface-sunken);
+    display: flex;
+    flex-direction: column;
+    background:
+        radial-gradient(900px 420px at 100% -10%, rgb(16 163 120 / 12%), transparent 60%),
+        var(--surface-sunken);
     color: var(--ink);
+}
+
+.lab-navbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: .75rem 1rem;
+    flex-wrap: wrap;
+    padding: .7rem 1.25rem;
+    background: rgb(255 255 255 / 88%);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(14px);
+}
+
+.lab-navbar-brand {
+    padding: .4rem .9rem;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(135deg, var(--brand-600), var(--brand-900));
+    color: white;
+    font-weight: 750;
+    text-decoration: none;
+    box-shadow: var(--shadow-sm);
+}
+
+.lab-navbar-links,
+.lab-navbar-account {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    flex-wrap: wrap;
+}
+
+.lab-navbar-end {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.lab-navbar-student {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .3rem .8rem .3rem .3rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+}
+
+.lab-navbar-avatar {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--brand-600);
+    color: white;
+    font-weight: 800;
+}
+
+.lab-navbar-student-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.lab-navbar-student-name {
+    max-width: 10rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 750;
+    color: var(--brand-900);
+}
+
+.lab-navbar-student-grade {
+    color: var(--ink-soft);
+    font-size: .78rem;
 }
 
 .biology-content {
     width: min(100%, 52rem);
     margin-inline: auto;
+    padding: 1.5rem 1.25rem 2.5rem;
+    flex: 1;
 }
 
 .biology-content .school-lab {
@@ -260,8 +346,21 @@ h1:focus {
 
 /* Pages that need the full page width (e.g. the teacher dashboard and test builder)
    opt in with .school-lab-wide instead of the default centered reading-width column. */
-.biology-content:has(.school-lab-wide) {
-    width: 100%;
+.biology-content:has(.school-lab-wide),
+.biology-content:has(.variant-board) {
+    width: min(100%, 76rem);
+}
+
+.biology-content:has(.variant-board) {
+    display: flex;
+    flex-direction: column;
+    justify-content: safe center;
+}
+
+.variant-board {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
 }
 
 .builder-editor {
@@ -277,25 +376,14 @@ h1:focus {
     margin: 0 0 .75rem .25rem;
 }
 
-.biology-sidebar {
-    margin-bottom: 1rem;
-}
-
-.biology-brand,
 .biology-nav-link {
-    display: block;
-    padding: .55rem .9rem;
+    display: inline-flex;
+    align-items: center;
+    padding: .45rem .85rem;
     border-radius: var(--radius-pill);
     color: var(--brand-900);
     font-weight: 650;
-}
-
-.biology-brand {
-    background: linear-gradient(135deg, var(--brand-500), var(--accent-500));
-    color: white;
     text-decoration: none;
-    box-shadow: var(--shadow-sm);
-    margin-bottom: .75rem;
 }
 
 .biology-profile-form {
@@ -303,32 +391,148 @@ h1:focus {
     margin-top: 1.5rem;
 }
 
-@media (min-width: 900px) {
-    .biology-shell {
-        display: grid;
-        grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
-        gap: 2rem;
-        padding-inline: max(1rem, calc((100% - 73rem) / 2));
-        align-items: start;
+.biology-nav-button {
+    border: 0;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+.variant-board-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.variant-board-head h1 {
+    max-width: 18ch;
+    margin: .35rem 0 .4rem;
+    font-size: clamp(1.8rem, 3vw, 2.6rem);
+    letter-spacing: -.035em;
+    color: var(--brand-900);
+}
+
+.variant-board-head p:last-child {
+    max-width: 42rem;
+    margin: 0;
+    color: var(--ink-soft);
+}
+
+.variant-stats {
+    display: grid;
+    flex: 1 1 18rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .75rem;
+    margin: 0;
+}
+
+.variant-stats div {
+    min-width: 0;
+    padding: .75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.variant-stats dt {
+    color: var(--ink-soft);
+    font-size: .75rem;
+    font-weight: 650;
+}
+
+.variant-stats dd {
+    margin: .15rem 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--brand-900);
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+@media (max-width: 760px) {
+    .lab-navbar {
+        gap: .35rem .5rem;
     }
 
-    .biology-sidebar {
-        margin: 0;
-        position: sticky;
-        top: clamp(1rem, 5vw, 4rem);
+    .lab-navbar-end {
+        width: 100%;
+        margin-left: 0;
+        justify-content: space-between;
     }
 
-    .biology-shell:has(.school-lab-wide) {
-        padding-inline: 1rem;
+    .variant-stats {
+        display: none;
     }
 }
 
-.biology-nav-button {
-    width: 100%;
-    border: 0;
-    background: none;
-    text-align: left;
-    font: inherit;
+.variant-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 1rem;
+    align-content: start;
+}
+
+.variant-card {
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    min-height: 16rem;
+    padding: 1.25rem 1.3rem 1.1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    color: inherit;
+    text-decoration: none;
+    box-shadow: var(--shadow-sm);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.variant-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--brand-200);
+    box-shadow: var(--shadow-md);
+    color: inherit;
+}
+
+.variant-card-kicker {
+    color: var(--brand-700);
+    font-size: .8rem;
+    font-weight: 750;
+}
+
+.variant-card h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    letter-spacing: -.02em;
+    color: var(--brand-900);
+}
+
+.variant-card p {
+    margin: 0;
+    color: var(--ink-soft);
+}
+
+.variant-card-go {
+    margin-top: auto;
+    align-self: flex-start;
+    padding: .4rem 1rem;
+    border-radius: var(--radius-pill);
+    background: var(--brand-600);
+    color: white;
+    font-weight: 700;
+}
+
+.variant-board-note {
+    margin: 0;
+    padding: .9rem 1.1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    color: var(--ink-soft);
 }
 
 .biology-nav-link:hover {

@@ -1,12 +1,14 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @using BlazorAppTestSchool.Data
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @inject NavigationManager NavigationManager
+@inject ProtectedSessionStorage ProfileStorage
 
 <div class="biology-shell">
-    <aside class="biology-sidebar">
-        <a class="biology-brand" href="">Шкільна лабораторія</a>
-        <nav aria-label="Навігація контрольної">
+    <header class="lab-navbar">
+        <a class="lab-navbar-brand" href="">Шкільна лабораторія</a>
+        <nav class="lab-navbar-links" aria-label="Навігація">
             <NavLink class="biology-nav-link" href="" Match="NavLinkMatch.All">Учень</NavLink>
             <NavLink class="biology-nav-link" href="teacher">Вчитель</NavLink>
             <AuthorizeView Roles="@ApplicationRoles.Admin">
@@ -15,23 +17,35 @@
                 </Authorized>
             </AuthorizeView>
         </nav>
-        <nav class="mt-3" aria-label="Обліковий запис">
-            <AuthorizeView>
-                <Authorized>
-                    <NavLink class="biology-nav-link" href="Account/Manage">@context.User.Identity?.Name</NavLink>
-                    <form action="Account/Logout" method="post">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
-                        <button type="submit" class="biology-nav-link biology-nav-button">Вийти</button>
-                    </form>
-                </Authorized>
-                <NotAuthorized>
-                    <NavLink class="biology-nav-link" href="Account/Login">Увійти</NavLink>
-                    <NavLink class="biology-nav-link" href="Account/Register">Зареєструватися</NavLink>
-                </NotAuthorized>
-            </AuthorizeView>
-        </nav>
-    </aside>
+        <div class="lab-navbar-end">
+            @if (student is { } pupil)
+            {
+                <div class="lab-navbar-student" title="@pupil.Name">
+                    <span class="lab-navbar-avatar" aria-hidden="true">@AvatarLetter(pupil.LastName)</span>
+                    <span class="lab-navbar-student-text">
+                        <span class="lab-navbar-student-name">@pupil.LastName</span>
+                        <span class="lab-navbar-student-grade">@pupil.Grade клас</span>
+                    </span>
+                </div>
+            }
+            <nav class="lab-navbar-account" aria-label="Обліковий запис">
+                <AuthorizeView>
+                    <Authorized>
+                        <NavLink class="biology-nav-link" href="Account/Manage">@context.User.Identity?.Name</NavLink>
+                        <form action="Account/Logout" method="post">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                            <button type="submit" class="biology-nav-link biology-nav-button">Вийти</button>
+                        </form>
+                    </Authorized>
+                    <NotAuthorized>
+                        <NavLink class="biology-nav-link" href="Account/Login">Увійти</NavLink>
+                        <NavLink class="biology-nav-link" href="Account/Register">Зареєструватися</NavLink>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </nav>
+        </div>
+    </header>
     <main class="biology-content">
         @Body
     </main>
@@ -45,6 +59,7 @@
 
 @code {
     private string? currentUrl;
+    private BiologyProfile? student;
 
     protected override void OnInitialized()
     {
@@ -52,11 +67,34 @@
         NavigationManager.LocationChanged += OnLocationChanged;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
+            student = saved.Success && saved.Value is { IsValid: true } profile ? profile : null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Microsoft.JSInterop.JSException or Microsoft.JSInterop.JSDisconnectedException)
+        {
+            student = null;
+        }
+
+        StateHasChanged();
+    }
+
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
         StateHasChanged();
     }
+
+    private static string AvatarLetter(string lastName) =>
+        string.IsNullOrWhiteSpace(lastName) ? "?" : lastName.Trim()[..1].ToUpperInvariant();
 
     public void Dispose()
     {

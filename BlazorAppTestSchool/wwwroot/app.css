@@ -77,6 +77,33 @@ a, .btn-link {
     --bs-btn-hover-color: var(--ink);
 }
 
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0;
+    padding: .5rem 1rem .5rem .75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--brand-900);
+    font: inherit;
+    font-weight: 700;
+    line-height: 1.2;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+}
+
+.back-button:hover {
+    background: var(--surface-muted);
+    color: var(--brand-900);
+}
+
+.back-button svg {
+    width: 1.05rem;
+    height: 1.05rem;
+}
+
 .form-control, .form-select {
     border-radius: var(--radius-sm);
     border-color: var(--border);

@@ -38,13 +38,23 @@ else
         @if (message is not null)
         {
             <p class="text-danger" role="alert">@message</p>
-            <a href="teacher">До списку робіт</a>
+            <button type="button" class="back-button" @onclick="GoBackAsync">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                Назад
+            </button>
         }
         else if (report is { } result)
         {
             <section aria-labelledby="report-heading">
                 <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
-                    <a href="teacher">До списку робіт</a>
+                    <button type="button" class="back-button" @onclick="GoBackAsync">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M15 5 8 12l7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        Назад
+                    </button>
                     <a class="btn btn-primary" href="@($"teacher/reports/{Attempt}/word")" data-enhance-nav="false">
                         Завантажити Word
                     </a>
@@ -355,8 +365,54 @@ else
     private Guid? ParseFolderId() =>
         FolderParam is { Length: > 0 } value && value != "unfiled" && Guid.TryParse(value, out var id) ? id : null;
 
-    protected override async Task OnParametersSetAsync()
+    private int pageLoad;
+    private string? forcedQuery;
+
+    protected override Task OnParametersSetAsync() => LoadPageAsync();
+
+    private async Task GoBackAsync()
     {
+        var moved = false;
+        try
+        {
+            moved = await JS.InvokeAsync<bool>("schoolLab.back");
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or ObjectDisposedException)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogDebug(exception, "Back navigation was not available.");
+        }
+
+        if (!moved)
+        {
+            forcedQuery = "";
+            Navigation.NavigateTo("teacher");
+        }
+        else
+        {
+            var location = await JS.InvokeAsync<string>("schoolLab.search");
+            var path = location.Split('?', 2)[0].TrimEnd('/');
+            if (!path.Equals("/teacher", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
+        await LoadPageAsync();
+    }
+
+    private async Task LoadPageAsync()
+    {
+        var load = ++pageLoad;
+        await SyncQueryAsync();
+        if (load != pageLoad)
+        {
+            return;
+        }
+
         if (Preview)
         {
             previewTest = TestId is { Length: > 0 } id && Guid.TryParse(id, out var testId)
@@ -380,15 +436,35 @@ else
         {
             if (Attempt is null)
             {
-                allTests = await TestStore.ListAsync();
+                var tests = await TestStore.ListAsync();
+                if (load != pageLoad)
+                {
+                    return;
+                }
+
+                report = null;
+                retakeOpen = false;
+                message = null;
+                allTests = tests;
                 await LoadFolderViewAsync();
+                if (load != pageLoad)
+                {
+                    return;
+                }
+
                 await LoadBoardsAsync();
                 return;
             }
 
-            report = Guid.TryParse(Attempt, out var attemptId)
+            var found = Guid.TryParse(Attempt, out var attemptId)
                 ? await AttemptStore.FindAsync(attemptId, CancellationToken.None)
                 : null;
+            if (load != pageLoad)
+            {
+                return;
+            }
+
+            report = found;
             if (report is null)
             {
                 message = "Роботу не знайдено.";
@@ -420,6 +496,57 @@ else
         var folderId = ParseFolderId();
         currentFolder = !IsUnfiledView && folderId is { } id ? await FolderStore.GetAsync(id) : null;
         folderTests = await TestStore.ListByFolderAsync(IsUnfiledView ? null : folderId);
+    }
+
+    private async Task SyncQueryAsync()
+    {
+        var location = Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery;
+        if (forcedQuery is { } forced)
+        {
+            forcedQuery = null;
+            location = "/teacher" + forced;
+        }
+        else
+        {
+            try
+            {
+                location = await JS.InvokeAsync<string>("schoolLab.search");
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or JSException or JSDisconnectedException)
+            {
+            }
+        }
+
+        var split = location.IndexOf('?');
+        var query = split < 0 ? "" : location[split..];
+        Preview = string.Equals(ReadQuery(query, "preview"), "true", StringComparison.OrdinalIgnoreCase);
+        TestId = ReadQuery(query, "test");
+        FolderParam = ReadQuery(query, "folder");
+        Attempt = ReadQuery(query, "attempt");
+    }
+
+    private static string? ReadQuery(string query, string key)
+    {
+        if (string.IsNullOrEmpty(query))
+        {
+            return null;
+        }
+
+        var trimmed = query[0] == '?' ? query[1..] : query;
+        foreach (var part in trimmed.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var split = part.IndexOf('=');
+            var name = Uri.UnescapeDataString(split < 0 ? part : part[..split]);
+            if (!name.Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var value = split < 0 ? "" : Uri.UnescapeDataString(part[(split + 1)..]);
+            return value.Length == 0 ? null : value;
+        }
+
+        return null;
     }
 
     private string BuilderUrl() => FolderParam is null ? "teacher/builder" : $"teacher/builder?folder={FolderParam}";

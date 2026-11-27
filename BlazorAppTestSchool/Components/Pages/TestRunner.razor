@@ -6,55 +6,64 @@
 @inject IJSRuntime JS
 @using static BlazorAppTestSchool.Data.BiologyAttemptReport
 
-<p class="school-lab-subject biology-test-label">@Test.Subject · @(Test.Grade is { } grade ? $"{grade} клас" : null) · @(Participant?.Name ?? "Перегляд учителя")</p>
-
 @if (questionIndex == Questions.Length)
 {
-    <section class="school-lab test-result @(score == Questions.Length ? "test-result-perfect" : null)" aria-labelledby="result-heading">
-        <h2 id="result-heading">Тест завершено</h2>
-        @if (explanation is not null)
-        {
-            <p>Попередній результат: <strong class="school-lab-score">@score із @Questions.Length балів</strong>. За пояснення можна отримати ще 1 бал після перевірки вчителем.</p>
-            <details class="mb-3">
-                <summary>Твоє пояснення</summary>
-                <p class="mt-2" style="white-space: pre-wrap">@explanation</p>
+    <section class="test-result-stage">
+        <section class="school-lab test-result @(score == Questions.Length ? "test-result-perfect" : null)" aria-labelledby="result-heading">
+            <p class="school-lab-subject test-result-kicker">@Test.Subject · @(Test.Grade is { } grade ? $"{grade} клас" : null) · @(Participant?.Name ?? "Перегляд учителя")</p>
+            <h2 id="result-heading">Тест завершено</h2>
+            @if (explanation is not null)
+            {
+                <p class="test-result-lead">Попередній результат</p>
+                <p class="school-lab-score">@score із @Questions.Length балів</p>
+                <p class="test-result-note">За пояснення можна отримати ще 1 бал після перевірки вчителем.</p>
+                <details class="test-result-details">
+                    <summary>Твоє пояснення</summary>
+                    <p style="white-space: pre-wrap">@explanation</p>
+                </details>
+            }
+            else
+            {
+                <p class="test-result-lead">Твій результат</p>
+                <p class="school-lab-score">@score із @Questions.Length балів</p>
+            }
+            <dl class="test-result-facts">
+                <div>
+                    <dt>Загальний час</dt>
+                    <dd>@FormatDuration(attemptDuration)</dd>
+                </div>
+            </dl>
+            <details class="test-result-details">
+                <summary>Час на кожне питання</summary>
+                <ol>
+                    @foreach (var result in questionResults)
+                    {
+                        <li>@FormatDuration(result.Duration)</li>
+                    }
+                </ol>
             </details>
-        }
-        else
-        {
-            <p>Твій результат: <strong class="school-lab-score">@score із @Questions.Length балів</strong>.</p>
-        }
-        <p>Загальний час: <strong>@FormatDuration(attemptDuration)</strong>.</p>
-        <details class="mb-3">
-            <summary>Час на кожне питання</summary>
-            <ol class="mt-2">
-                @foreach (var result in questionResults)
+            @if (Participant is not null)
+            {
+                @if (reportSaved)
                 {
-                    <li>@FormatDuration(result.Duration)</li>
+                    <p class="test-result-note">Роботу здано. Вчитель може переглянути результат у списку робіт. Повторно пройти контрольну можна лише після дозволу вчителя.</p>
                 }
-            </ol>
-        </details>
-        @if (Participant is not null)
-        {
-            @if (reportSaved)
-            {
-                <p>Роботу здано. Вчитель може переглянути результат у списку робіт. Повторно пройти контрольну можна лише після дозволу вчителя.</p>
+                else if (alreadySubmitted)
+                {
+                    <p class="test-result-note text-danger" role="alert">Це прізвище вже здавало контрольну. Тест вдруге не зберігається, доки вчитель не натисне «Апрувнути».</p>
+                }
+                else if (savingReport)
+                {
+                    <p class="test-result-note" role="status">Зберігаємо роботу…</p>
+                }
+                else if (saveFailed)
+                {
+                    <p class="test-result-note text-danger" role="alert">Роботу не вдалося зберегти.</p>
+                    <button class="btn btn-primary" @onclick="SaveReportAsync">Спробувати ще раз</button>
+                }
             }
-            else if (alreadySubmitted)
-            {
-                <p class="text-danger" role="alert">Це прізвище вже здавало контрольну. Тест вдруге не зберігається, доки вчитель не натисне «Апрувнути».</p>
-            }
-            else if (savingReport)
-            {
-                <p role="status">Зберігаємо роботу…</p>
-            }
-            else if (saveFailed)
-            {
-                <p class="text-danger" role="alert">Роботу не вдалося зберегти.</p>
-                <button class="btn btn-primary mb-3" @onclick="SaveReportAsync">Спробувати ще раз</button>
-            }
-        }
-        <a class="btn btn-outline-secondary" href="@(Participant is null ? "teacher" : "")">@(Participant is null ? "До сторінки вчителя" : "Повернутися до правил")</a>
+            <a class="btn btn-primary btn-lg" href="@(Participant is null ? "teacher" : "")">@(Participant is null ? "До сторінки вчителя" : "Повернутися до правил")</a>
+        </section>
     </section>
 }
 else
@@ -62,6 +71,8 @@ else
     var question = Questions[questionIndex];
     var displayedIndex = questionIndex;
     var progress = (int)Math.Round(100.0 * displayedIndex / Questions.Length);
+
+    <p class="school-lab-subject biology-test-label">@Test.Subject · @(Test.Grade is { } grade ? $"{grade} клас" : null) · @(Participant?.Name ?? "Перегляд учителя")</p>
 
     <section @key="displayedIndex" class="school-lab test-question" aria-labelledby="question-heading">
         <div class="test-progress" role="progressbar" aria-valuenow="@progress" aria-valuemin="0" aria-valuemax="100">

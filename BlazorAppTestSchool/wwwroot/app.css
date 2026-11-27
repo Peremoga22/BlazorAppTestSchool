@@ -452,10 +452,107 @@ h1:focus {
     width: min(100%, 76rem);
 }
 
-.biology-content:has(.variant-board) {
+.biology-content:has(.variant-board),
+.biology-content:has(.test-result-stage) {
     display: flex;
     flex-direction: column;
     justify-content: safe center;
+}
+
+.biology-content:has(.test-result-stage) {
+    width: min(100%, 58rem);
+}
+
+.test-result-stage {
+    width: 100%;
+}
+
+.test-result {
+    font-size: 1.2rem;
+    line-height: 1.55;
+}
+
+.test-result h2 {
+    margin: .35rem 0 .85rem;
+    max-width: none;
+    font-size: clamp(2.15rem, 4vw, 2.85rem);
+    line-height: 1.15;
+    letter-spacing: -.03em;
+    color: var(--brand-900);
+}
+
+.test-result-kicker {
+    margin-bottom: 0;
+    font-size: 1.05rem;
+    padding: .45rem 1rem;
+}
+
+.test-result-lead {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 1.15rem;
+    font-weight: 650;
+}
+
+.test-result .school-lab-score {
+    margin: .15rem 0 .9rem;
+    font-size: clamp(2.6rem, 6vw, 3.6rem);
+}
+
+.test-result-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin: 0 0 1.1rem;
+}
+
+.test-result-facts div {
+    min-width: 10rem;
+    padding: .85rem 1.15rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-muted);
+}
+
+.test-result-facts dt {
+    color: var(--ink-soft);
+    font-size: .95rem;
+    font-weight: 650;
+}
+
+.test-result-facts dd {
+    margin: .15rem 0 0;
+    color: var(--brand-900);
+    font-size: 1.55rem;
+    font-weight: 800;
+}
+
+.test-result-details {
+    margin-bottom: 1.1rem;
+}
+
+.test-result-details summary {
+    font-size: 1.15rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.test-result-details ol,
+.test-result-details p {
+    margin: .7rem 0 0;
+    font-size: 1.12rem;
+}
+
+.test-result-note {
+    max-width: 38rem;
+    margin: 0 0 1.25rem;
+    color: var(--ink-soft);
+    font-size: 1.15rem;
+    line-height: 1.6;
+}
+
+.test-result .btn-lg {
+    margin-top: .25rem;
 }
 
 .variant-board {

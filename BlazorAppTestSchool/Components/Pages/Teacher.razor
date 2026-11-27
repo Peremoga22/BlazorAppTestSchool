@@ -147,7 +147,7 @@ else
                         </div>
                         @if (currentFolder is { } folderInView)
                         {
-                            <div class="d-flex gap-2">
+                            <div class="folder-toolbar">
                                 <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => RenameFolderAsync(folderInView)">
                                     Перейменувати
                                 </button>
@@ -185,7 +185,7 @@ else
                     }
                     else
                     {
-                        <div class="table-responsive mt-3">
+                        <div class="table-responsive responsive-table mt-3">
                             <table class="table align-middle">
                                 <thead>
                                     <tr>
@@ -200,10 +200,10 @@ else
                                     @foreach (var test in folderTests)
                                     {
                                         <tr @key="test.Id">
-                                            <td>@test.Title</td>
-                                            <td>@test.Subject @(test.Grade is { } g ? $"· {g} клас" : null)</td>
-                                            <td>@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                            <td class="test-status">
+                                            <td data-label="Назва">@test.Title</td>
+                                            <td data-label="Предмет / клас">@test.Subject @(test.Grade is { } g ? $"· {g} клас" : null)</td>
+                                            <td data-label="Завантажено">@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                            <td class="test-status" data-label="Статус">
                                                 <div class="attempt-actions-row">
                                                     @if (test.IsActive)
                                                     {
@@ -220,7 +220,7 @@ else
                                                     }
                                                 </div>
                                             </td>
-                                            <td class="test-actions">
+                                            <td class="test-actions" data-label="Дії">
                                                 <div class="attempt-actions-row">
                                                     <a class="btn btn-sm btn-outline-secondary" href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
                                                     <a class="btn btn-sm btn-outline-primary" href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
@@ -257,7 +257,7 @@ else
                     <section class="school-lab mb-4" aria-labelledby="@($"board-heading-{board.Grade}")" @key="board.Grade">
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                             <h2 id="@($"board-heading-{board.Grade}")" class="h4 mb-0">@board.Grade клас · здано @board.Attempts.Length</h2>
-                            <input class="form-control form-control-sm" style="max-width:16rem" placeholder="Пошук за прізвищем…"
+                            <input class="form-control form-control-sm board-search" placeholder="Пошук за прізвищем…"
                                    value="@board.Search" @oninput="e => OnSearchChangedAsync(board, e.Value?.ToString() ?? string.Empty)" />
                         </div>
 
@@ -267,7 +267,7 @@ else
                         }
                         else
                         {
-                            <div class="table-responsive">
+                            <div class="table-responsive responsive-table">
                                 <table class="table align-middle">
                                     <thead>
                                         <tr>
@@ -283,18 +283,18 @@ else
                                         @foreach (var item in board.Attempts)
                                         {
                                             <tr @key="item.Id">
-                                                <th scope="row">@(string.IsNullOrWhiteSpace(item.StudentName) ? "Без прізвища" : item.StudentName)</th>
-                                                <td>@(item.TestTitle ?? "—")</td>
-                                                <td>
+                                                <th scope="row" data-label="Учень">@(string.IsNullOrWhiteSpace(item.StudentName) ? "Без прізвища" : item.StudentName)</th>
+                                                <td data-label="Варіант">@(item.TestTitle ?? "—")</td>
+                                                <td data-label="Оцінка">
                                                     @item.Score з @item.MaxScore
                                                     @if (item.PendingReview)
                                                     {
                                                         <span class="d-block small">Попередня</span>
                                                     }
                                                 </td>
-                                                <td>@FormatDuration(item.Duration)</td>
-                                                <td class="text-nowrap">@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
-                                                <td class="attempt-actions">
+                                                <td data-label="Час">@FormatDuration(item.Duration)</td>
+                                                <td data-label="Здано">@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
+                                                <td class="attempt-actions" data-label="Дії">
                                                     <div class="attempt-actions-row">
                                                         <a class="btn btn-sm btn-outline-secondary" href="@ReportUrl(item.Id)">Переглянути</a>
                                                         @if (item.RetakeOpen)

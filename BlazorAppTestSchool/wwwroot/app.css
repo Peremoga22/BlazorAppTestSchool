@@ -554,25 +554,10 @@ h1:focus {
     font-weight: 800;
 }
 
-@media (max-width: 760px) {
-    .lab-navbar {
-        gap: .35rem .5rem;
-    }
-
-    .lab-navbar-end {
-        width: 100%;
-        margin-left: 0;
-        justify-content: space-between;
-    }
-
-    .variant-stats {
-        display: none;
-    }
-}
 
 .variant-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
     gap: 1rem;
     align-content: start;
 }
@@ -723,8 +708,8 @@ h1:focus {
 }
 
 .dnd-slot-label {
-    flex: 0 0 auto;
-    min-width: 7rem;
+    flex: 1 1 7rem;
+    min-width: 0;
     font-weight: 650;
     color: var(--ink-soft);
 }
@@ -841,7 +826,7 @@ h1:focus {
 /* ===== Teacher: test folders ================================================ */
 .teacher-folder-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
     gap: 1rem;
 }
 
@@ -895,4 +880,264 @@ h1:focus {
 .teacher-folder-card-muted .teacher-folder-icon {
     background: var(--surface-muted);
     color: var(--ink-soft);
+}
+
+.board-search {
+    width: min(100%, 16rem);
+}
+
+.folder-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+/* ===== Screens: phone, tablet, desktop, wide ============================== */
+.biology-shell,
+.biology-content,
+.school-lab,
+.auth-shell {
+    min-width: 0;
+    max-width: 100%;
+}
+
+img,
+svg,
+video {
+    max-width: 100%;
+}
+
+@media (max-width: 960px) {
+    .lab-navbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "brand end"
+            "links links";
+        align-items: center;
+        gap: .55rem .75rem;
+        padding: .65rem .85rem;
+    }
+
+    .lab-navbar-brand {
+        grid-area: brand;
+        justify-self: start;
+        min-width: 0;
+        max-width: 100%;
+        font-size: .95rem;
+        line-height: 1.2;
+    }
+
+    .lab-navbar-end {
+        grid-area: end;
+        width: auto;
+        margin-left: 0;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+        min-width: 0;
+        gap: .4rem;
+    }
+
+    .lab-navbar-links {
+        grid-area: links;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(6.2rem, 1fr));
+        gap: .35rem;
+        width: 100%;
+    }
+
+    .lab-navbar-links .biology-nav-link {
+        justify-content: center;
+        padding: .5rem .35rem;
+    }
+
+    .lab-navbar-account .biology-nav-link {
+        max-width: 9rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .lab-navbar-student {
+        min-width: 0;
+        padding-right: .55rem;
+    }
+
+    .lab-navbar-student-name {
+        max-width: 6.5rem;
+    }
+
+    .variant-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .biology-content {
+        padding: 1rem .85rem 2rem;
+    }
+
+    .school-lab {
+        padding: 1.15rem 1rem;
+    }
+
+    .school-lab h1,
+    .school-lab-intro h1 {
+        max-width: none;
+    }
+
+    .biology-profile-form,
+    .student-entry {
+        max-width: none;
+    }
+
+    .biology-profile-form .btn-primary,
+    .student-entry .btn-primary {
+        width: 100%;
+    }
+
+    .board-search {
+        width: 100%;
+    }
+
+    .folder-toolbar {
+        width: 100%;
+    }
+
+    .folder-toolbar .btn {
+        flex: 1 1 8rem;
+    }
+
+    .school-lab form.d-flex > div {
+        flex: 1 1 12rem;
+    }
+
+    .school-lab form.d-flex .form-select,
+    .school-lab form.d-flex .form-control {
+        width: 100%;
+    }
+
+    .responsive-table {
+        overflow: visible;
+    }
+
+    .responsive-table > .table {
+        display: block;
+        width: 100%;
+        margin-bottom: 0;
+    }
+
+    .responsive-table > .table > thead {
+        display: none;
+    }
+
+    .responsive-table > .table > tbody {
+        display: flex;
+        flex-direction: column;
+        gap: .75rem;
+    }
+
+    .responsive-table > .table > tbody > tr {
+        display: flex;
+        flex-direction: column;
+        gap: .55rem;
+        padding: .9rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface-muted);
+    }
+
+    .responsive-table > .table > tbody > tr > td,
+    .responsive-table > .table > tbody > tr > th {
+        display: block;
+        width: auto;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        white-space: normal;
+        text-align: start;
+        background: transparent;
+    }
+
+    .responsive-table > .table > tbody > tr > [data-label]::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: .15rem;
+        color: var(--ink-soft);
+        font-size: .72rem;
+        font-weight: 750;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+    }
+
+    .test-status,
+    .test-actions,
+    .attempt-actions {
+        width: auto;
+        min-width: 0;
+        white-space: normal;
+    }
+
+    .attempt-actions-row {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .attempt-actions-row .btn {
+        flex: 1 1 7.5rem;
+        max-width: 14rem;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .school-lab-intro {
+        font-size: 1.05rem;
+    }
+
+    .school-lab-intro .table {
+        font-size: 1rem;
+    }
+
+    .dnd-slot {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .lab-navbar {
+        padding: .55rem .7rem .7rem;
+        gap: .5rem;
+    }
+
+    .lab-navbar-brand {
+        font-size: .86rem;
+        padding: .4rem .7rem;
+    }
+
+    .lab-navbar-account > a.biology-nav-link {
+        display: none;
+    }
+
+    .lab-navbar-links {
+        grid-template-columns: repeat(auto-fit, minmax(5.4rem, 1fr));
+    }
+
+    .biology-content {
+        padding: .85rem .65rem 1.75rem;
+    }
+
+    .teacher-folder-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .variant-stats {
+        display: none;
+    }
+}
+
+@media (min-width: 1400px) {
+    .biology-content:has(.school-lab-wide) {
+        width: min(100%, 88rem);
+    }
 }

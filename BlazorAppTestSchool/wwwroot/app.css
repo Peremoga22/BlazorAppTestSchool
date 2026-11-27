@@ -244,6 +244,66 @@ h1:focus {
     --bs-table-border-color: var(--border);
 }
 
+.attempt-actions {
+    width: 1%;
+    min-width: 22rem;
+    white-space: nowrap;
+}
+
+.school-lab .table-responsive {
+    overflow-x: auto;
+}
+
+.attempt-actions-row {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: nowrap;
+    width: max-content;
+}
+
+.attempt-actions-row .btn {
+    --bs-btn-padding-y: .3rem;
+    --bs-btn-padding-x: .75rem;
+    --bs-btn-font-size: .85rem;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.attempt-actions-row .btn-outline-primary {
+    --bs-btn-color: var(--brand-700);
+    --bs-btn-border-color: var(--brand-200);
+    --bs-btn-hover-bg: var(--brand-50);
+    --bs-btn-hover-border-color: var(--brand-500);
+    --bs-btn-hover-color: var(--brand-900);
+    --bs-btn-active-bg: var(--brand-100);
+    --bs-btn-active-border-color: var(--brand-500);
+    --bs-btn-active-color: var(--brand-900);
+}
+
+.attempt-actions-row .btn-outline-danger {
+    --bs-btn-color: var(--danger);
+    --bs-btn-border-color: #f0c4c4;
+    --bs-btn-hover-bg: #fdecec;
+    --bs-btn-hover-border-color: var(--danger);
+    --bs-btn-hover-color: var(--danger);
+    --bs-btn-active-bg: #fdecec;
+    --bs-btn-active-border-color: var(--danger);
+    --bs-btn-active-color: var(--danger);
+}
+
+.attempt-allowed {
+    display: inline-flex;
+    align-items: center;
+    padding: .3rem .75rem;
+    border-radius: var(--radius-pill);
+    background: var(--brand-50);
+    color: var(--brand-700);
+    font-size: .85rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 .school-lab-timer {
     display: inline-flex;
     align-items: center;

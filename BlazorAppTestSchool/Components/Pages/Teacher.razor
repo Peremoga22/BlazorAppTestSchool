@@ -279,24 +279,26 @@ else
                                                     }
                                                 </td>
                                                 <td>@FormatDuration(item.Duration)</td>
-                                                <td>@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
-                                                <td class="d-flex flex-wrap gap-2">
-                                                    <a href="@ReportUrl(item.Id)">Переглянути</a>
-                                                    @if (item.RetakeOpen)
-                                                    {
-                                                        <span class="align-self-center">Дозволено</span>
-                                                    }
-                                                    else
-                                                    {
-                                                        <button type="button" class="btn btn-sm btn-outline-primary"
-                                                                @onclick="() => ApproveRetakeAsync(board, item)">
-                                                            Апрувнути
+                                                <td class="text-nowrap">@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
+                                                <td class="attempt-actions">
+                                                    <div class="attempt-actions-row">
+                                                        <a class="btn btn-sm btn-outline-secondary" href="@ReportUrl(item.Id)">Переглянути</a>
+                                                        @if (item.RetakeOpen)
+                                                        {
+                                                            <span class="attempt-allowed">Дозволено</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                                                    @onclick="() => ApproveRetakeAsync(board, item)">
+                                                                Апрувнути
+                                                            </button>
+                                                        }
+                                                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                                                @onclick="() => DeleteAttemptAsync(board, item.Id)">
+                                                            Видалити
                                                         </button>
-                                                    }
-                                                    <button type="button" class="btn btn-sm btn-outline-danger"
-                                                            @onclick="() => DeleteAttemptAsync(board, item.Id)">
-                                                        Видалити
-                                                    </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         }

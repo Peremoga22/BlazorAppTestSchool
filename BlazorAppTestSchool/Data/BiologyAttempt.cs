@@ -29,6 +29,7 @@ public sealed record BiologyAttemptReport(
     public string? FirstName { get; init; }
     public string? Patronymic { get; init; }
     public string? TestTitle { get; init; }
+    public Guid? TestId { get; init; }
 
     public static string FormatDuration(TimeSpan duration)
     {

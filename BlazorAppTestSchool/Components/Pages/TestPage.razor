@@ -91,7 +91,7 @@ else if (variants.Length > 1 && test is null)
 }
 else
 {
-    <TestRunner Test="test!" Participant="participant" />
+    <TestRunner Test="test!" TestId="activeTestId" Participant="participant" />
 }
 
 @code {
@@ -100,6 +100,7 @@ else
     private BiologyProfile? profile;
     private TestDefinitionSummary[] variants = [];
     private TestDefinitionModel? test;
+    private Guid? activeTestId;
     private bool testReady;
     private bool canStart = true;
     private string? loadError;
@@ -158,6 +159,7 @@ else
         if (!canStart)
         {
             test = null;
+            activeTestId = null;
             testReady = true;
             StateHasChanged();
             return;
@@ -166,12 +168,13 @@ else
         variants = await TestStore.ListActiveAsync(BiologySeed.Subject, participant.Grade);
 
         var chosenId = SelectedTestId is { Length: > 0 } id && Guid.TryParse(id, out var guid) ? guid : (Guid?)null;
-        test = variants.Length switch
+        activeTestId = variants.Length switch
         {
-            1 => await TestStore.GetAsync(variants[0].Id),
-            > 1 when chosenId is { } selected && variants.Any(v => v.Id == selected) => await TestStore.GetAsync(selected),
+            1 => variants[0].Id,
+            > 1 when chosenId is { } selected && variants.Any(variant => variant.Id == selected) => selected,
             _ => null
         };
+        test = activeTestId is { } testId ? await TestStore.GetAsync(testId) : null;
 
         testReady = true;
         StateHasChanged();

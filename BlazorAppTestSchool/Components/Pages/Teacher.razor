@@ -234,7 +234,14 @@ else
             @if (boards.Count == 0)
             {
                 <h2 class="h4">Роботи учнів</h2>
-                <p>Ще немає жодного тесту чи зданої роботи — картки класів з'являться тут автоматично.</p>
+                @if (FolderParam is null)
+                {
+                    <p>Ще немає жодного тесту чи зданої роботи — картки класів з'являться тут автоматично.</p>
+                }
+                else
+                {
+                    <p>У цій папці ще немає зданих робіт.</p>
+                }
             }
             else
             {
@@ -459,8 +466,10 @@ else
 
     private async Task LoadBoardsAsync()
     {
-        var testGrades = allTests.Where(test => test.Grade.HasValue).Select(test => test.Grade!.Value);
-        var attemptGrades = await AttemptStore.DistinctGradesAsync();
+        var testGrades = TestsInView().Where(test => test.Grade.HasValue).Select(test => test.Grade!.Value);
+        var attemptGrades = FolderParam is null
+            ? await AttemptStore.DistinctGradesAsync()
+            : await GradesWithPapersInViewAsync();
         var grades = testGrades.Concat(attemptGrades).Distinct().OrderBy(grade => grade).ToArray();
 
         var existing = boards.ToDictionary(board => board.Grade);
@@ -473,8 +482,42 @@ else
         }
     }
 
-    private async Task ReloadBoardAsync(GradeBoard board) =>
-        board.Attempts = await AttemptStore.ListByGradeAsync(board.Grade, board.Search, CancellationToken.None);
+    private TestDefinitionSummary[] TestsInView() =>
+        FolderParam is null
+            ? allTests
+            : allTests.Where(test => test.FolderId == (IsUnfiledView ? null : ParseFolderId())).ToArray();
+
+    private async Task<int[]> GradesWithPapersInViewAsync()
+    {
+        var grades = new List<int>();
+        foreach (var grade in await AttemptStore.DistinctGradesAsync())
+        {
+            var papers = await AttemptStore.ListByGradeAsync(grade, null, CancellationToken.None);
+            if (papers.Any(BelongsToView))
+            {
+                grades.Add(grade);
+            }
+        }
+
+        return grades.ToArray();
+    }
+
+    private bool BelongsToView(BiologyAttemptSummary paper)
+    {
+        if (FolderParam is null)
+        {
+            return true;
+        }
+
+        var folderId = AttemptFolderLink.Resolve(paper.TestId, paper.TestTitle, paper.Grade, allTests);
+        return IsUnfiledView ? folderId is null : folderId == ParseFolderId();
+    }
+
+    private async Task ReloadBoardAsync(GradeBoard board)
+    {
+        var papers = await AttemptStore.ListByGradeAsync(board.Grade, board.Search, CancellationToken.None);
+        board.Attempts = papers.Where(BelongsToView).ToArray();
+    }
 
     private async Task OnSearchChangedAsync(GradeBoard board, string value)
     {

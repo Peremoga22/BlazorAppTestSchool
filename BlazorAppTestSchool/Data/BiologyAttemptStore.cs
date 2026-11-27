@@ -237,7 +237,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
             var fallbackName = string.IsNullOrWhiteSpace(attempt.StudentName) ? "Без прізвища" : attempt.StudentName;
             var fallbackKey = NormalizeLastName(FirstWord(fallbackName));
             return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, fallbackName, attempt.Grade,
-                0, 0, false, TimeSpan.Zero, null, fallbackKey, openRetakes.Contains(fallbackKey));
+                0, 0, false, TimeSpan.Zero, null, fallbackKey, openRetakes.Contains(fallbackKey), null);
         }
 
         var questions = report.Questions ?? [];
@@ -250,7 +250,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
         var lastNameKey = NormalizeLastName(LastNameOf(report));
         return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, name, report.Grade, report.Score,
             questions.Length, questions.Any(question => question.Points is null), report.Duration, report.TestTitle,
-            lastNameKey, lastNameKey.Length > 0 && openRetakes.Contains(lastNameKey));
+            lastNameKey, lastNameKey.Length > 0 && openRetakes.Contains(lastNameKey), report.TestId);
     }
 
     private static bool TryRead(string? json, out BiologyAttemptReport report)
@@ -314,4 +314,4 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
 public sealed record BiologyAttemptSummary(
     Guid Id, DateTimeOffset? SubmittedAt, string StudentName, int Grade,
     int Score, int MaxScore, bool PendingReview, TimeSpan Duration, string? TestTitle,
-    string LastNameKey, bool RetakeOpen);
+    string LastNameKey, bool RetakeOpen, Guid? TestId);

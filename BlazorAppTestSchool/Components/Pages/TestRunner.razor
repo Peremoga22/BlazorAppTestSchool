@@ -230,6 +230,7 @@ else
 
 @code {
     [Parameter] public required TestDefinitionModel Test { get; set; }
+    [Parameter] public Guid? TestId { get; set; }
     [Parameter] public BiologyProfile? Participant { get; set; }
 
     private TestQuestion[] Questions => Test.Questions;
@@ -544,7 +545,8 @@ else
                 LastName = participant.LastName,
                 FirstName = participant.FirstName,
                 Patronymic = participant.Patronymic,
-                TestTitle = Test.Title
+                TestTitle = Test.Title,
+                TestId = TestId
             };
             if (!await AttemptStore.SaveAsync(attemptId, report))
             {

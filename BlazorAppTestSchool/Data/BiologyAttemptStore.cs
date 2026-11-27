@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BlazorAppTestSchool.Data.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -308,6 +309,55 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await database.BiologyAttempts.Where(attempt => attempt.Id == attemptId).ExecuteDeleteAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Deletes submitted papers that belong to these tests. Ownership is resolved while the tests
+    /// still exist, so a paper follows its own test and is not taken from another folder.
+    /// </summary>
+    public async Task DeleteBelongingToAsync(
+        IReadOnlyCollection<Guid> testIds,
+        IReadOnlyList<TestDefinitionSummary> tests,
+        CancellationToken cancellationToken = default)
+    {
+        if (testIds.Count == 0)
+        {
+            return;
+        }
+
+        var targets = testIds as HashSet<Guid> ?? testIds.ToHashSet();
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var rows = await database.BiologyAttempts.AsNoTracking()
+            .Select(attempt => new { attempt.Id, attempt.Grade, attempt.ReportJson })
+            .ToListAsync(cancellationToken);
+
+        var doomed = new List<Guid>();
+        foreach (var row in rows)
+        {
+            Guid? testId = null;
+            string? title = null;
+            var grade = row.Grade;
+            if (TryRead(row.ReportJson, out var report))
+            {
+                testId = report.TestId;
+                title = report.TestTitle;
+                grade = report.Grade;
+            }
+
+            var owner = AttemptFolderLink.OwningTestId(testId, title, grade, tests);
+            if (owner is Guid id && targets.Contains(id))
+            {
+                doomed.Add(row.Id);
+            }
+        }
+
+        if (doomed.Count == 0)
+        {
+            return;
+        }
+
+        await database.BiologyAttempts.Where(attempt => doomed.Contains(attempt.Id)).ExecuteDeleteAsync(cancellationToken);
     }
 }
 

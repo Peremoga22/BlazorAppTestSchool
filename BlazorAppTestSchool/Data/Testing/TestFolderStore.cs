@@ -61,14 +61,13 @@ public sealed class TestFolderStore(IServiceScopeFactory scopeFactory)
         await database.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Deletes the folder but keeps the tests inside it — they just become unfiled.</summary>
+    /// <summary>Deletes the folder and the tests inside it. Submitted papers are removed by the caller first.</summary>
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        await database.TestDefinitions.Where(test => test.FolderId == id)
-            .ExecuteUpdateAsync(set => set.SetProperty(test => test.FolderId, (Guid?)null), cancellationToken);
+        await database.TestDefinitions.Where(test => test.FolderId == id).ExecuteDeleteAsync(cancellationToken);
         await database.TestFolders.Where(folder => folder.Id == id).ExecuteDeleteAsync(cancellationToken);
     }
 }

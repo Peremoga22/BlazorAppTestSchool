@@ -224,6 +224,9 @@ else
                                                 <div class="attempt-actions-row">
                                                     <a class="btn btn-sm btn-outline-secondary" href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
                                                     <a class="btn btn-sm btn-outline-primary" href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTestAsync(test)">
+                                                        Видалити
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -457,15 +460,45 @@ else
         currentFolder = await FolderStore.GetAsync(folder.Id);
     }
 
-    private async Task DeleteFolderAsync(TestFolderSummary folder)
+    private async Task DeleteTestAsync(TestDefinitionSummary test)
     {
-        if (!await JS.InvokeAsync<bool>("confirm", $"Видалити папку \"{folder.Name}\"? Тести всередині залишаться, просто стануть без папки."))
+        if (!await JS.InvokeAsync<bool>("confirm", $"Видалити контрольну \"{test.Title}\"? Здані роботи саме цієї контрольної теж зникнуть. Інші контрольні в папці залишаться."))
         {
             return;
         }
 
-        await FolderStore.DeleteAsync(folder.Id);
-        Navigation.NavigateTo("teacher");
+        try
+        {
+            await AttemptStore.DeleteBelongingToAsync(new[] { test.Id }, allTests);
+            await TestStore.DeleteAsync(test.Id);
+            await RefreshAfterTestChangeAsync();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not delete a test.");
+            message = "Не вдалося видалити контрольну. Онови сторінку і спробуй ще раз.";
+        }
+    }
+
+    private async Task DeleteFolderAsync(TestFolderSummary folder)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Видалити папку \"{folder.Name}\"? Зникнуть усі контрольні в ній і всі здані роботи."))
+        {
+            return;
+        }
+
+        try
+        {
+            var tests = allTests.Where(item => item.FolderId == folder.Id).Select(item => item.Id).ToArray();
+            await AttemptStore.DeleteBelongingToAsync(tests, allTests);
+            await FolderStore.DeleteAsync(folder.Id);
+            Navigation.NavigateTo("teacher");
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not delete a folder.");
+            message = "Не вдалося видалити папку. Онови сторінку і спробуй ще раз.";
+        }
     }
 
     private async Task LoadBoardsAsync()

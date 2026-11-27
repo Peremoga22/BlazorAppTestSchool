@@ -10,14 +10,21 @@ public static class AttemptFolderLink
     /// Folder of the test this paper was written for. Null means the test is unfiled
     /// (or the paper cannot be matched to a test, which is treated the same way).
     /// </summary>
-    public static Guid? Resolve(Guid? testId, string? testTitle, int grade, IReadOnlyList<TestDefinitionSummary> tests)
+    public static Guid? Resolve(Guid? testId, string? testTitle, int grade, IReadOnlyList<TestDefinitionSummary> tests) =>
+        Pick(testId, testTitle, grade, tests)?.FolderId;
+
+    /// <summary>The test this paper was written for, when it can be matched.</summary>
+    public static Guid? OwningTestId(Guid? testId, string? testTitle, int grade, IReadOnlyList<TestDefinitionSummary> tests) =>
+        Pick(testId, testTitle, grade, tests)?.Id;
+
+    private static TestDefinitionSummary? Pick(Guid? testId, string? testTitle, int grade, IReadOnlyList<TestDefinitionSummary> tests)
     {
         if (testId is Guid id)
         {
             var byId = tests.FirstOrDefault(test => test.Id == id);
             if (byId is not null)
             {
-                return byId.FolderId;
+                return byId;
             }
         }
 
@@ -36,6 +43,6 @@ public static class AttemptFolderLink
 
         var graded = titled.Where(test => test.Grade == grade).ToArray();
         var pool = graded.Length > 0 ? graded : titled;
-        return pool.OrderByDescending(test => test.UploadedAt).First().FolderId;
+        return pool.OrderByDescending(test => test.UploadedAt).First();
     }
 }

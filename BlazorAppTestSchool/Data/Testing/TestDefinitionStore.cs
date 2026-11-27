@@ -114,6 +114,13 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
     public async Task DeactivateAsync(Guid id, CancellationToken cancellationToken = default) =>
         await SetActiveAsync(id, false, cancellationToken);
 
+    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await database.TestDefinitions.Where(test => test.Id == id).ExecuteDeleteAsync(cancellationToken);
+    }
+
     private async Task SetActiveAsync(Guid id, bool isActive, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();

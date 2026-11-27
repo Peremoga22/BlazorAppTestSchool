@@ -94,7 +94,14 @@ namespace BlazorAppTestSchool.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int>("Grade")
+                        .HasColumnType("int");
+
                     b.Property<string>("ReportJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("StudentName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -116,6 +123,9 @@ namespace BlazorAppTestSchool.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("FolderId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int?>("Grade")
                         .HasColumnType("int");
 
@@ -136,6 +146,24 @@ namespace BlazorAppTestSchool.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("TestDefinitions");
+                });
+
+            modelBuilder.Entity("BlazorAppTestSchool.Data.Testing.TestFolderEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TestFolders");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>

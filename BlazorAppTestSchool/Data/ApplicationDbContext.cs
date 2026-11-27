@@ -8,5 +8,6 @@ namespace BlazorAppTestSchool.Data
     {
         public DbSet<BiologyAttempt> BiologyAttempts => Set<BiologyAttempt>();
         public DbSet<TestDefinitionEntity> TestDefinitions => Set<TestDefinitionEntity>();
+        public DbSet<TestFolderEntity> TestFolders => Set<TestFolderEntity>();
     }
 }

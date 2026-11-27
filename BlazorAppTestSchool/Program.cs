@@ -30,6 +30,7 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddSingleton<BiologyAttemptStore>();
 builder.Services.AddSingleton<TestDefinitionStore>();
 builder.Services.AddSingleton<TestImageStore>();
+builder.Services.AddSingleton<TestFolderStore>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {

@@ -21,16 +21,38 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
         {
             Id = attemptId,
             SubmittedAt = DateTimeOffset.UtcNow,
+            Grade = report.Grade,
+            StudentName = report.StudentName,
             ReportJson = JsonSerializer.Serialize(report)
         });
         await database.SaveChangesAsync();
     }
 
-    public async Task<(BiologyAttemptSummary[] Attempts, bool HasMore)> ListAsync(int page, CancellationToken cancellationToken)
+    /// <summary>Every grade that has at least one submitted attempt, for building one "board" per grade.</summary>
+    public async Task<int[]> DistinctGradesAsync(CancellationToken cancellationToken = default)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var attempts = await database.BiologyAttempts.AsNoTracking()
+        return await database.BiologyAttempts.AsNoTracking()
+            .Select(attempt => attempt.Grade)
+            .Distinct()
+            .OrderBy(grade => grade)
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<(BiologyAttemptSummary[] Attempts, bool HasMore)> ListByGradeAsync(
+        int grade, int page, string? search, CancellationToken cancellationToken)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var query = database.BiologyAttempts.AsNoTracking().Where(attempt => attempt.Grade == grade);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            query = query.Where(attempt => attempt.StudentName.Contains(search));
+        }
+
+        var attempts = await query
             .OrderByDescending(attempt => attempt.SubmittedAt)
             .ThenByDescending(attempt => attempt.Id)
             .Skip((page - 1) * PageSize)
@@ -58,6 +80,13 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
             .SingleOrDefaultAsync(cancellationToken);
 
         return reportJson is null ? null : ReadReport(reportJson);
+    }
+
+    public async Task DeleteAsync(Guid attemptId, CancellationToken cancellationToken = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await database.BiologyAttempts.Where(attempt => attempt.Id == attemptId).ExecuteDeleteAsync(cancellationToken);
     }
 
     private static BiologyAttemptReport ReadReport(string json) =>

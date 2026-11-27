@@ -24,7 +24,7 @@
                     Переглянути
                 </a>
             }
-            <a class="btn btn-outline-secondary" href="teacher">До сторінки вчителя</a>
+            <a class="btn btn-outline-secondary" href="@(FolderParam is { Length: > 0 } ? $"teacher?folder={FolderParam}" : "teacher")">До сторінки вчителя</a>
         </div>
     </div>
 
@@ -293,6 +293,7 @@
 
 @code {
     [Parameter] public Guid? TestId { get; set; }
+    [SupplyParameterFromQuery(Name = "folder")] private string? FolderParam { get; set; }
 
     private string title = string.Empty;
     private string subject = "Біологія";
@@ -645,7 +646,10 @@
             }
             else
             {
-                var saved = await TestStore.SaveAsync(validated, json);
+                var folderId = FolderParam is { Length: > 0 } and not "unfiled" && Guid.TryParse(FolderParam, out var parsedFolderId)
+                    ? parsedFolderId
+                    : (Guid?)null;
+                var saved = await TestStore.SaveAsync(validated, json, folderId);
                 savedId = saved.Id;
                 Navigation.NavigateTo($"teacher/builder/{saved.Id:N}", replace: true);
                 return;

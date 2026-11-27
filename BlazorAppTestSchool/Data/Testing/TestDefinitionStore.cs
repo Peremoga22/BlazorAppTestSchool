@@ -4,7 +4,7 @@ namespace BlazorAppTestSchool.Data.Testing;
 
 public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
 {
-    public async Task<TestDefinitionSummary> SaveAsync(TestDefinitionModel model, string json, CancellationToken cancellationToken = default)
+    public async Task<TestDefinitionSummary> SaveAsync(TestDefinitionModel model, string json, Guid? folderId = null, CancellationToken cancellationToken = default)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -19,12 +19,26 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
             Grade = model.Grade,
             UploadedAt = DateTimeOffset.UtcNow,
             IsActive = true,
+            FolderId = folderId,
             DefinitionJson = json
         };
         database.TestDefinitions.Add(entity);
         await database.SaveChangesAsync(cancellationToken);
 
         return ToSummary(entity);
+    }
+
+    /// <summary>Tests inside a folder, or the unfiled ones when <paramref name="folderId"/> is null.</summary>
+    public async Task<TestDefinitionSummary[]> ListByFolderAsync(Guid? folderId, CancellationToken cancellationToken = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var entities = await database.TestDefinitions.AsNoTracking()
+            .Where(test => test.FolderId == folderId)
+            .OrderByDescending(test => test.UploadedAt)
+            .ToArrayAsync(cancellationToken);
+
+        return entities.Select(ToSummary).ToArray();
     }
 
     /// <summary>The single most-recently-activated test for a subject/grade, for the common case of one variant.</summary>
@@ -122,7 +136,7 @@ public sealed class TestDefinitionStore(IServiceScopeFactory scopeFactory)
     }
 
     private static TestDefinitionSummary ToSummary(TestDefinitionEntity entity) => new(
-        entity.Id, entity.Title, entity.Subject, entity.Grade, entity.UploadedAt, entity.IsActive);
+        entity.Id, entity.Title, entity.Subject, entity.Grade, entity.UploadedAt, entity.IsActive, entity.FolderId);
 }
 
-public sealed record TestDefinitionSummary(Guid Id, string Title, string Subject, int? Grade, DateTimeOffset UploadedAt, bool IsActive);
+public sealed record TestDefinitionSummary(Guid Id, string Title, string Subject, int? Grade, DateTimeOffset UploadedAt, bool IsActive, Guid? FolderId);

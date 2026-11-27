@@ -532,3 +532,62 @@ h1:focus {
     border-style: solid;
     background: var(--brand-100);
 }
+
+/* ===== Teacher: test folders ================================================ */
+.teacher-folder-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 1rem;
+}
+
+.teacher-folder-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    padding: 1.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    text-decoration: none;
+    color: var(--ink);
+    text-align: center;
+    transition: box-shadow .15s ease, transform .15s ease;
+}
+
+.teacher-folder-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+    text-decoration: none;
+    color: var(--ink);
+}
+
+.teacher-folder-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: var(--brand-50);
+    color: var(--brand-600);
+}
+
+.teacher-folder-icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.teacher-folder-name {
+    font-weight: 650;
+}
+
+.teacher-folder-count {
+    font-size: .85rem;
+    color: var(--ink-soft);
+}
+
+.teacher-folder-card-muted .teacher-folder-icon {
+    background: var(--surface-muted);
+    color: var(--ink-soft);
+}

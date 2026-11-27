@@ -8,5 +8,6 @@ public sealed class TestDefinitionEntity
     public int? Grade { get; set; }
     public DateTimeOffset UploadedAt { get; init; }
     public bool IsActive { get; set; }
+    public Guid? FolderId { get; set; }
     public required string DefinitionJson { get; set; }
 }

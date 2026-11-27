@@ -8,6 +8,9 @@
 @using static BlazorAppTestSchool.Data.BiologyAttemptReport
 @inject BiologyAttemptStore AttemptStore
 @inject TestDefinitionStore TestStore
+@inject TestFolderStore FolderStore
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
 @inject ILogger<Teacher> Logger
 
 @if (Preview)
@@ -35,13 +38,13 @@ else
         @if (message is not null)
         {
             <p class="text-danger" role="alert">@message</p>
-            <a href="@ListUrl(CurrentPage)">До списку робіт</a>
+            <a href="teacher">До списку робіт</a>
         }
         else if (report is { } result)
         {
             <section aria-labelledby="report-heading">
                 <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
-                    <a href="@ListUrl(CurrentPage)">До списку робіт</a>
+                    <a href="teacher">До списку робіт</a>
                     <a class="btn btn-primary" href="@($"teacher/reports/{Attempt}/word")" data-enhance-nav="false">
                         Завантажити Word
                     </a>
@@ -85,155 +88,248 @@ else
         }
         else
         {
-            <section class="teacher-tests mb-4" aria-labelledby="tests-heading">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <h2 id="tests-heading" class="h4 mb-0">Тести</h2>
-                    <a class="btn btn-primary btn-sm" href="teacher/builder">+ Новий тест (конструктор)</a>
-                </div>
-                <p>
-                    Створи тест конструктором вище або завантаж файл у форматі JSON за
-                    <a href="test-template.json" data-enhance-nav="false">стандартом (шаблон)</a>.
-                    Можна тримати кілька активних тестів для одного класу одночасно (наприклад, "Варіант 1" і
-                    "Варіант 2") — учень сам побачить вибір варіантів.
-                </p>
-                <div class="teacher-upload">
-                    <InputFile OnChange="OnFileSelectedAsync" accept=".json" class="form-control" />
-                </div>
-                @if (uploadError is { Length: > 0 } errors)
-                {
-                    <ul class="text-danger mt-2" role="alert">
-                        @foreach (var error in errors)
-                        {
-                            <li>@error</li>
-                        }
-                    </ul>
-                }
-                else if (uploadSuccess is not null)
-                {
-                    <p class="text-success mt-2" role="status">@uploadSuccess</p>
-                }
-
-                @if (uploadedTests.Length > 0)
-                {
-                    <div class="table-responsive mt-3">
-                        <table class="table align-middle">
-                            <thead>
-                                <tr>
-                                    <th scope="col">Назва</th>
-                                    <th scope="col">Предмет / клас</th>
-                                    <th scope="col">Завантажено</th>
-                                    <th scope="col">Статус</th>
-                                    <th scope="col"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var test in uploadedTests)
-                                {
-                                    <tr>
-                                        <td>@test.Title</td>
-                                        <td>@test.Subject @(test.Grade is { } g ? $"· {g} клас" : null)</td>
-                                        <td>@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                        <td class="d-flex align-items-center gap-2">
-                                            @if (test.IsActive)
-                                            {
-                                                <span class="badge text-bg-success">Активний</span>
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => DeactivateAsync(test.Id)">
-                                                    Деактивувати
-                                                </button>
-                                            }
-                                            else
-                                            {
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ActivateAsync(test.Id)">
-                                                    Активувати
-                                                </button>
-                                            }
-                                        </td>
-                                        <td class="d-flex gap-2">
-                                            <a href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
-                                            <a href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </section>
-
-            <h2 class="h4">Роботи учнів</h2>
-            @if (attempts.Length == 0)
+            @if (FolderParam is null)
             {
-                <p>На цій сторінці ще немає зданих робіт.</p>
+                <section class="teacher-tests mb-4" aria-labelledby="folders-heading">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h2 id="folders-heading" class="h4 mb-0">Папки контрольних</h2>
+                        <button type="button" class="btn btn-primary btn-sm" @onclick="CreateFolderAsync">+ Нова папка</button>
+                    </div>
+                    <p>Створюй папки (наприклад, за класом чи темою), відкривай і завантажуй туди контрольні.</p>
+
+                    @if (folders.Length == 0 && unfiledCount == 0)
+                    {
+                        <p class="text-muted">Папок ще немає — створи першу.</p>
+                    }
+                    else
+                    {
+                        <div class="teacher-folder-grid mt-3">
+                            @foreach (var folder in folders)
+                            {
+                                <a class="teacher-folder-card" href="@($"teacher?folder={folder.Id:N}")" @key="folder.Id">
+                                    <span class="teacher-folder-icon" aria-hidden="true">@FolderIcon</span>
+                                    <span class="teacher-folder-name">@folder.Name</span>
+                                    <span class="teacher-folder-count">@folder.TestCount @TestWord(folder.TestCount)</span>
+                                </a>
+                            }
+                            @if (unfiledCount > 0)
+                            {
+                                <a class="teacher-folder-card teacher-folder-card-muted" href="teacher?folder=unfiled">
+                                    <span class="teacher-folder-icon" aria-hidden="true">@FolderIcon</span>
+                                    <span class="teacher-folder-name">Без папки</span>
+                                    <span class="teacher-folder-count">@unfiledCount @TestWord(unfiledCount)</span>
+                                </a>
+                            }
+                        </div>
+                    }
+                </section>
             }
             else
             {
-                <div class="table-responsive">
-                    <table class="table align-middle">
-                        <thead>
-                            <tr>
-                                <th scope="col">Учень</th>
-                                <th scope="col">Клас</th>
-                                <th scope="col">Варіант</th>
-                                <th scope="col">Оцінка</th>
-                                <th scope="col">Час</th>
-                                <th scope="col">Здано</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in attempts)
+                <section class="teacher-tests mb-4" aria-labelledby="tests-heading">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <a href="teacher">← Усі папки</a>
+                            <h2 id="tests-heading" class="h4 mb-0 mt-1">@(currentFolder?.Name ?? "Без папки")</h2>
+                        </div>
+                        @if (currentFolder is { } folderInView)
+                        {
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => RenameFolderAsync(folderInView)">
+                                    Перейменувати
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteFolderAsync(folderInView)">
+                                    Видалити папку
+                                </button>
+                            </div>
+                        }
+                    </div>
+                    <p>
+                        Завантаж файл тесту у форматі JSON за
+                        <a href="test-template.json" data-enhance-nav="false">стандартом (шаблон)</a>
+                        або створи <a href="@BuilderUrl()">конструктором</a> — він з'явиться саме тут.
+                    </p>
+                    <div class="teacher-upload">
+                        <InputFile OnChange="OnFileSelectedAsync" accept=".json" class="form-control" />
+                    </div>
+                    @if (uploadError is { Length: > 0 } errors)
+                    {
+                        <ul class="text-danger mt-2" role="alert">
+                            @foreach (var error in errors)
                             {
-                                <tr>
-                                    <th scope="row"><a href="@ReportUrl(item.Id)">@item.StudentName</a></th>
-                                    <td>@item.Grade</td>
-                                    <td>@(item.TestTitle ?? "—")</td>
-                                    <td>
-                                        @item.Score з @item.MaxScore
-                                        @if (item.PendingReview)
-                                        {
-                                            <span class="d-block small">Попередня</span>
-                                        }
-                                    </td>
-                                    <td>@FormatDuration(item.Duration)</td>
-                                    <td>@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
-                                </tr>
+                                <li>@error</li>
                             }
-                        </tbody>
-                    </table>
-                </div>
+                        </ul>
+                    }
+                    else if (uploadSuccess is not null)
+                    {
+                        <p class="text-success mt-2" role="status">@uploadSuccess</p>
+                    }
+
+                    @if (folderTests.Length == 0)
+                    {
+                        <p class="text-muted mt-3">У цій папці ще немає тестів.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive mt-3">
+                            <table class="table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Назва</th>
+                                        <th scope="col">Предмет / клас</th>
+                                        <th scope="col">Завантажено</th>
+                                        <th scope="col">Статус</th>
+                                        <th scope="col"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var test in folderTests)
+                                    {
+                                        <tr @key="test.Id">
+                                            <td>@test.Title</td>
+                                            <td>@test.Subject @(test.Grade is { } g ? $"· {g} клас" : null)</td>
+                                            <td>@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                            <td class="d-flex align-items-center gap-2">
+                                                @if (test.IsActive)
+                                                {
+                                                    <span class="badge text-bg-success">Активний</span>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => DeactivateAsync(test.Id)">
+                                                        Деактивувати
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ActivateAsync(test.Id)">
+                                                        Активувати
+                                                    </button>
+                                                }
+                                            </td>
+                                            <td class="d-flex gap-2">
+                                                <a href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
+                                                <a href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </section>
             }
-            @if (CurrentPage > 1 || hasMore)
+
+            @if (boards.Count == 0)
             {
-                <nav class="d-flex gap-3" aria-label="Сторінки робіт">
-                    @if (CurrentPage > 1)
-                    {
-                        <a href="@ListUrl(CurrentPage - 1)">Попередня сторінка</a>
-                    }
-                    @if (hasMore)
-                    {
-                        <a href="@ListUrl(CurrentPage + 1)">Наступна сторінка</a>
-                    }
-                </nav>
+                <h2 class="h4">Роботи учнів</h2>
+                <p>Ще немає жодного тесту чи зданої роботи — картки класів з'являться тут автоматично.</p>
+            }
+            else
+            {
+                @foreach (var board in boards)
+                {
+                    <section class="school-lab mb-4" aria-labelledby="@($"board-heading-{board.Grade}")" @key="board.Grade">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                            <h2 id="@($"board-heading-{board.Grade}")" class="h4 mb-0">@board.Grade клас</h2>
+                            <input class="form-control form-control-sm" style="max-width:16rem" placeholder="Пошук за прізвищем…"
+                                   value="@board.Search" @oninput="e => OnSearchChangedAsync(board, e.Value?.ToString() ?? string.Empty)" />
+                        </div>
+
+                        @if (board.Attempts.Length == 0)
+                        {
+                            <p>@(board.Search.Length > 0 ? "Нічого не знайдено." : "Ще немає зданих робіт.")</p>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Учень</th>
+                                            <th scope="col">Варіант</th>
+                                            <th scope="col">Оцінка</th>
+                                            <th scope="col">Час</th>
+                                            <th scope="col">Здано</th>
+                                            <th scope="col"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in board.Attempts)
+                                        {
+                                            <tr @key="item.Id">
+                                                <th scope="row">@item.StudentName</th>
+                                                <td>@(item.TestTitle ?? "—")</td>
+                                                <td>
+                                                    @item.Score з @item.MaxScore
+                                                    @if (item.PendingReview)
+                                                    {
+                                                        <span class="d-block small">Попередня</span>
+                                                    }
+                                                </td>
+                                                <td>@FormatDuration(item.Duration)</td>
+                                                <td>@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
+                                                <td class="d-flex gap-2">
+                                                    <a href="@ReportUrl(item.Id)">Переглянути</a>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                                            @onclick="() => DeleteAttemptAsync(board, item.Id)">
+                                                        Видалити
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        @if (board.Page > 1 || board.HasMore)
+                        {
+                            <nav class="d-flex gap-3" aria-label="@($"Сторінки робіт {board.Grade} класу")">
+                                @if (board.Page > 1)
+                                {
+                                    <button type="button" class="btn btn-link p-0" @onclick="() => ChangePageAsync(board, board.Page - 1)">
+                                        Попередня сторінка
+                                    </button>
+                                }
+                                @if (board.HasMore)
+                                {
+                                    <button type="button" class="btn btn-link p-0" @onclick="() => ChangePageAsync(board, board.Page + 1)">
+                                        Наступна сторінка
+                                    </button>
+                                }
+                            </nav>
+                        }
+                    </section>
+                }
             }
         }
     </section>
 }
 
 @code {
+    private static readonly RenderFragment FolderIcon = @<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+    </svg>;
+
     [SupplyParameterFromQuery] private bool Preview { get; set; }
     [SupplyParameterFromQuery(Name = "test")] private string? TestId { get; set; }
+    [SupplyParameterFromQuery(Name = "folder")] private string? FolderParam { get; set; }
     [SupplyParameterFromQuery(Name = "attempt")] private string? Attempt { get; set; }
-    [SupplyParameterFromQuery(Name = "page")] private string? PageNumber { get; set; }
     [CascadingParameter] private HttpContext? HttpContext { get; set; }
 
     private TestDefinitionModel? previewTest;
     private BiologyAttemptReport? report;
-    private BiologyAttemptSummary[] attempts = [];
-    private TestDefinitionSummary[] uploadedTests = [];
+    private readonly List<GradeBoard> boards = [];
+    private TestDefinitionSummary[] allTests = [];
+    private TestFolderSummary[] folders = [];
+    private TestFolderSummary? currentFolder;
+    private TestDefinitionSummary[] folderTests = [];
+    private int unfiledCount;
     private string? message;
     private string? uploadSuccess;
     private string[]? uploadError;
-    private bool hasMore;
-    private int CurrentPage => int.TryParse(PageNumber, out var page) && page is > 0 and <= int.MaxValue / BiologyAttemptStore.PageSize ? page : 1;
+
+    private bool IsUnfiledView => FolderParam == "unfiled";
+    private Guid? ParseFolderId() =>
+        FolderParam is { Length: > 0 } value && value != "unfiled" && Guid.TryParse(value, out var id) ? id : null;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -254,8 +350,9 @@ else
         {
             if (Attempt is null)
             {
-                (attempts, hasMore) = await AttemptStore.ListAsync(CurrentPage, CancellationToken.None);
-                uploadedTests = await TestStore.ListAsync();
+                allTests = await TestStore.ListAsync();
+                await LoadFolderViewAsync();
+                await LoadBoardsAsync();
                 return;
             }
 
@@ -274,6 +371,123 @@ else
         }
     }
 
+    private async Task LoadFolderViewAsync()
+    {
+        if (FolderParam is null)
+        {
+            folders = await FolderStore.ListAsync();
+            unfiledCount = allTests.Count(test => test.FolderId is null);
+            currentFolder = null;
+            folderTests = [];
+            return;
+        }
+
+        var folderId = ParseFolderId();
+        currentFolder = !IsUnfiledView && folderId is { } id ? await FolderStore.GetAsync(id) : null;
+        folderTests = await TestStore.ListByFolderAsync(IsUnfiledView ? null : folderId);
+    }
+
+    private string BuilderUrl() => FolderParam is null ? "teacher/builder" : $"teacher/builder?folder={FolderParam}";
+
+    private static string TestWord(int count)
+    {
+        var mod10 = count % 10;
+        var mod100 = count % 100;
+        if (mod10 == 1 && mod100 != 11)
+        {
+            return "тест";
+        }
+
+        return mod10 is >= 2 and <= 4 && (mod100 < 10 || mod100 >= 20) ? "тести" : "тестів";
+    }
+
+    private async Task CreateFolderAsync()
+    {
+        var name = await JS.InvokeAsync<string?>("prompt", "Назва нової папки");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        await FolderStore.CreateAsync(name);
+        folders = await FolderStore.ListAsync();
+    }
+
+    private async Task RenameFolderAsync(TestFolderSummary folder)
+    {
+        var name = await JS.InvokeAsync<string?>("prompt", "Нова назва папки", folder.Name);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        await FolderStore.RenameAsync(folder.Id, name);
+        currentFolder = await FolderStore.GetAsync(folder.Id);
+    }
+
+    private async Task DeleteFolderAsync(TestFolderSummary folder)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Видалити папку \"{folder.Name}\"? Тести всередині залишаться, просто стануть без папки."))
+        {
+            return;
+        }
+
+        await FolderStore.DeleteAsync(folder.Id);
+        Navigation.NavigateTo("teacher");
+    }
+
+    private async Task LoadBoardsAsync()
+    {
+        var testGrades = allTests.Where(test => test.Grade.HasValue).Select(test => test.Grade!.Value);
+        var attemptGrades = await AttemptStore.DistinctGradesAsync();
+        var grades = testGrades.Concat(attemptGrades).Distinct().OrderBy(grade => grade).ToArray();
+
+        var existing = boards.ToDictionary(board => board.Grade);
+        boards.Clear();
+        boards.AddRange(grades.Select(grade => existing.TryGetValue(grade, out var board) ? board : new GradeBoard(grade)));
+
+        foreach (var board in boards)
+        {
+            await ReloadBoardAsync(board);
+        }
+    }
+
+    private async Task ReloadBoardAsync(GradeBoard board) =>
+        (board.Attempts, board.HasMore) = await AttemptStore.ListByGradeAsync(board.Grade, board.Page, board.Search, CancellationToken.None);
+
+    private async Task OnSearchChangedAsync(GradeBoard board, string value)
+    {
+        board.Search = value;
+        board.Page = 1;
+        await ReloadBoardAsync(board);
+    }
+
+    private async Task ChangePageAsync(GradeBoard board, int page)
+    {
+        board.Page = page;
+        await ReloadBoardAsync(board);
+    }
+
+    private async Task DeleteAttemptAsync(GradeBoard board, Guid attemptId)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Видалити цю роботу назавжди? Це не можна скасувати."))
+        {
+            return;
+        }
+
+        await AttemptStore.DeleteAsync(attemptId);
+        await ReloadBoardAsync(board);
+    }
+
+    private sealed class GradeBoard(int grade)
+    {
+        public int Grade { get; } = grade;
+        public string Search { get; set; } = string.Empty;
+        public int Page { get; set; } = 1;
+        public BiologyAttemptSummary[] Attempts { get; set; } = [];
+        public bool HasMore { get; set; }
+    }
+
     private async Task OnFileSelectedAsync(InputFileChangeEventArgs e)
     {
         uploadError = null;
@@ -284,9 +498,9 @@ else
             using var reader = new StreamReader(stream);
             var json = await reader.ReadToEndAsync();
             var model = TestDefinitionParser.Parse(json);
-            var saved = await TestStore.SaveAsync(model, json);
+            var saved = await TestStore.SaveAsync(model, json, IsUnfiledView ? null : ParseFolderId());
             uploadSuccess = $"Тест \"{saved.Title}\" завантажено й активовано для {saved.Grade} класу.";
-            uploadedTests = await TestStore.ListAsync();
+            await RefreshAfterTestChangeAsync();
         }
         catch (TestDefinitionValidationException validation)
         {
@@ -302,15 +516,20 @@ else
     private async Task ActivateAsync(Guid id)
     {
         await TestStore.ActivateAsync(id);
-        uploadedTests = await TestStore.ListAsync();
+        await RefreshAfterTestChangeAsync();
     }
 
     private async Task DeactivateAsync(Guid id)
     {
         await TestStore.DeactivateAsync(id);
-        uploadedTests = await TestStore.ListAsync();
+        await RefreshAfterTestChangeAsync();
     }
 
-    private static string ListUrl(int page) => page <= 1 ? "teacher" : $"teacher?page={page}";
-    private string ReportUrl(Guid attemptId) => $"teacher?attempt={attemptId:N}&page={CurrentPage}";
+    private async Task RefreshAfterTestChangeAsync()
+    {
+        allTests = await TestStore.ListAsync();
+        await LoadFolderViewAsync();
+    }
+
+    private static string ReportUrl(Guid attemptId) => $"teacher?attempt={attemptId:N}";
 }

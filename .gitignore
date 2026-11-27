@@ -363,3 +363,7 @@ MigrationBackup/
 FodyWeavers.xsd
 # Teacher-uploaded test images (runtime data, not source)
 BlazorAppTestSchool/wwwroot/uploads/
+
+# Scratch build output used for isolated verification builds
+_verifyrun/
+_buildcheck/

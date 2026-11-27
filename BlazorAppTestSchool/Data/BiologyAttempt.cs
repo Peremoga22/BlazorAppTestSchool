@@ -4,6 +4,8 @@ public sealed class BiologyAttempt
 {
     public Guid Id { get; init; }
     public DateTimeOffset? SubmittedAt { get; init; }
+    public int Grade { get; init; }
+    public required string StudentName { get; init; }
     public required string ReportJson { get; init; }
 }
 

@@ -11,15 +11,73 @@
 @media (max-width: 42rem) {
     .auth-card {
         grid-template-columns: 1fr;
-        width: 100%;
+        width: min(100%, 22.5rem);
     }
 
     .auth-brand {
-        padding: 1.4rem 1rem;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        gap: .7rem;
+        padding: .7rem .9rem;
+        text-align: start;
+    }
+
+    .auth-brand-icon {
+        width: 2.35rem;
+        height: 2.35rem;
+        flex: 0 0 auto;
+    }
+
+    .auth-brand-icon svg {
+        width: 1.3rem;
+        height: 1.3rem;
+    }
+
+    .auth-brand-title {
+        font-size: 1rem;
+        line-height: 1.2;
+    }
+
+    .auth-brand-tagline {
+        display: none;
     }
 
     .auth-form {
-        padding: 1.35rem 1rem 1.5rem;
+        padding: .95rem .9rem 1.1rem;
+    }
+
+    .auth-form-heading {
+        font-size: 1.15rem;
+        margin-bottom: .7rem;
+    }
+
+    .entry-role-switch {
+        margin-bottom: .7rem;
+    }
+
+    .entry-lead {
+        margin-bottom: .55rem;
+        font-size: .92rem;
+        line-height: 1.35;
+    }
+
+    ::deep .student-entry .form-label {
+        margin-bottom: .15rem;
+        font-size: .9rem;
+    }
+
+    ::deep .student-entry .form-control,
+    ::deep .student-entry .form-select {
+        padding-top: .4rem;
+        padding-bottom: .4rem;
+        margin-bottom: .5rem !important;
+    }
+
+    ::deep .student-entry .btn-lg {
+        padding-top: .55rem;
+        padding-bottom: .55rem;
+        font-size: 1rem;
     }
 }
 

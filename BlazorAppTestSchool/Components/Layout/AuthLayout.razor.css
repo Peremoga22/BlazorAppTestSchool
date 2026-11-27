@@ -8,3 +8,10 @@
     padding: clamp(.75rem, 3vw, 1.5rem);
     background: var(--surface-sunken);
 }
+
+@media (max-width: 42rem) {
+    .auth-shell {
+        justify-content: flex-start;
+        padding: .7rem .7rem 1.25rem;
+    }
+}

@@ -45,8 +45,8 @@ else
 {
     <section class="school-lab school-lab-intro" aria-labelledby="test-heading">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-            <span>@participant.Name · @participant.Grade клас</span>
-            <button type="button" class="btn btn-outline-secondary btn-sm"
+            <span class="school-lab-who">@participant.Name · @participant.Grade клас</span>
+            <button type="button" class="btn btn-outline-secondary"
                     @onclick="ChangeProfileAsync" disabled="@savingProfile">Змінити профіль</button>
         </div>
         @if (!testCheckDone)

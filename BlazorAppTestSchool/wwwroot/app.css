@@ -184,6 +184,41 @@ h1:focus {
     color: var(--brand-900);
 }
 
+.school-lab-intro {
+    font-size: 1.35rem;
+    line-height: 1.55;
+}
+
+.school-lab-intro h1 {
+    font-size: clamp(2.5rem, 5vw, 3.75rem);
+    line-height: 1.12;
+}
+
+.school-lab-who {
+    font-size: 1.35rem;
+    font-weight: 750;
+    color: var(--brand-900);
+}
+
+.school-lab-intro .school-lab-subject {
+    font-size: 1.15rem;
+    padding: .4rem 1rem;
+}
+
+.school-lab-intro .table {
+    font-size: 1.3rem;
+}
+
+.school-lab-intro .table > :not(caption) > * > * {
+    padding: .9rem .75rem;
+}
+
+.school-lab-intro caption {
+    font-size: 1.2rem;
+    padding-bottom: .65rem;
+    color: var(--ink-soft);
+}
+
 .school-lab-subject {
     display: inline-flex;
     margin-bottom: .75rem;

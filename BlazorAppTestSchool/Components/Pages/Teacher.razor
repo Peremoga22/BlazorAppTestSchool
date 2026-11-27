@@ -248,17 +248,41 @@ else
                 </section>
             }
 
-            @if (boards.Count == 0)
+            @if (FolderParam is null)
+            {
+                var stats = SubjectStats();
+                <section class="teacher-stats" aria-labelledby="stats-heading">
+                    <h2 id="stats-heading" class="h4 mb-1">Статистика</h2>
+                    <p class="teacher-stats-lead">Скільки учнів уже пройшли кожну дисципліну.</p>
+                    @if (stats.Length == 0)
+                    {
+                        <p class="text-muted mb-0">Ще ніхто не здав контрольну.</p>
+                    }
+                    else
+                    {
+                        <div class="teacher-stats-grid">
+                            @foreach (var stat in stats)
+                            {
+                                <article class="teacher-stat-card" @key="stat.Subject">
+                                    <p class="teacher-stat-subject">@stat.Subject</p>
+                                    <p class="teacher-stat-count">@stat.People</p>
+                                    <p class="teacher-stat-label">@PassedPhrase(stat.People)</p>
+                                    <ul class="teacher-stat-classes">
+                                        @foreach (var row in stat.Classes)
+                                        {
+                                            <li>@row.Grade клас · @row.People</li>
+                                        }
+                                    </ul>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
+            }
+            else if (boards.Count == 0)
             {
                 <h2 class="h4">Роботи учнів</h2>
-                @if (FolderParam is null)
-                {
-                    <p>Ще немає жодного тесту чи зданої роботи — картки класів з'являться тут автоматично.</p>
-                }
-                else
-                {
-                    <p>У цій папці ще немає зданих робіт.</p>
-                }
+                <p>У цій папці ще немає зданих робіт.</p>
             }
             else
             {
@@ -666,6 +690,67 @@ else
         return grades.ToArray();
     }
 
+    private SubjectStat[] SubjectStats()
+    {
+        var papers = boards
+            .SelectMany(board => board.Attempts)
+            .Select(paper => new TaggedPaper(paper, SubjectLabel(paper)))
+            .ToArray();
+        return papers
+            .GroupBy(item => item.Subject, StringComparer.CurrentCultureIgnoreCase)
+            .Select(group => new SubjectStat(
+                group.First().Subject,
+                DistinctPeople(group),
+                group.GroupBy(item => item.Paper.Grade)
+                    .OrderBy(grade => grade.Key)
+                    .Select(grade => new ClassStat(grade.Key, DistinctPeople(grade)))
+                    .ToArray()))
+            .OrderBy(stat => stat.Subject, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
+    private string SubjectLabel(BiologyAttemptSummary paper)
+    {
+        TestDefinitionSummary? match = null;
+        if (paper.TestId is Guid id)
+        {
+            match = allTests.FirstOrDefault(test => test.Id == id);
+        }
+
+        if (match is null && !string.IsNullOrWhiteSpace(paper.TestTitle))
+        {
+            var titled = allTests
+                .Where(test => string.Equals(test.Title.Trim(), paper.TestTitle.Trim(), StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var graded = titled.Where(test => test.Grade == paper.Grade).ToArray();
+            var pool = graded.Length > 0 ? graded : titled;
+            match = pool.OrderByDescending(test => test.UploadedAt).FirstOrDefault();
+        }
+
+        var subject = match?.Subject.Trim();
+        return string.IsNullOrWhiteSpace(subject) ? "Без предмета" : subject;
+    }
+
+    private static int DistinctPeople(IEnumerable<TaggedPaper> papers) =>
+        papers
+            .Select(item => $"{item.Paper.Grade}|{item.Paper.LastNameKey}|{item.Paper.StudentName.Trim()}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+    private static string PassedPhrase(int count)
+    {
+        var mod10 = count % 10;
+        var mod100 = count % 100;
+        if (mod10 == 1 && mod100 != 11)
+        {
+            return "учень пройшов";
+        }
+
+        return mod10 is >= 2 and <= 4 && (mod100 < 10 || mod100 >= 20)
+            ? "учні пройшли"
+            : "учнів пройшло";
+    }
+
     private bool BelongsToView(BiologyAttemptSummary paper)
     {
         if (FolderParam is null)
@@ -752,6 +837,10 @@ else
         await AttemptStore.DeleteAsync(attemptId);
         await ReloadBoardAsync(board);
     }
+
+    private sealed record TaggedPaper(BiologyAttemptSummary Paper, string Subject);
+    private sealed record ClassStat(int Grade, int People);
+    private sealed record SubjectStat(string Subject, int People, ClassStat[] Classes);
 
     private sealed class GradeBoard(int grade)
     {

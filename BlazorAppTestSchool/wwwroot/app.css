@@ -948,6 +948,66 @@ h1:focus {
 }
 
 /* ===== Teacher: test folders ================================================ */
+.teacher-stats-lead {
+    margin-bottom: 1rem;
+    color: var(--ink-soft);
+}
+
+.teacher-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    gap: 1rem;
+}
+
+.teacher-stat-card {
+    padding: 1.15rem 1.25rem 1.05rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, var(--brand-50), var(--surface) 46%);
+    box-shadow: var(--shadow-sm);
+}
+
+.teacher-stat-subject {
+    margin: 0;
+    color: var(--brand-900);
+    font-size: 1.15rem;
+    font-weight: 750;
+}
+
+.teacher-stat-count {
+    margin: .35rem 0 0;
+    color: var(--brand-700);
+    font-size: clamp(2.6rem, 6vw, 3.4rem);
+    font-weight: 800;
+    letter-spacing: -.045em;
+    line-height: .95;
+}
+
+.teacher-stat-label {
+    margin: .25rem 0 .8rem;
+    color: var(--ink-soft);
+    font-weight: 650;
+}
+
+.teacher-stat-classes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.teacher-stat-classes li {
+    padding: .28rem .7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: .92rem;
+    font-weight: 650;
+}
+
 .teacher-folder-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));

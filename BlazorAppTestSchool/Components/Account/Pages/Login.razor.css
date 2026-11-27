@@ -67,6 +67,79 @@
     margin-bottom: 1.25rem;
 }
 
+.entry-role {
+    position: relative;
+}
+
+.entry-role-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}
+
+.entry-role-switch {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin-bottom: 1.25rem;
+    padding: .25rem;
+    border-radius: var(--radius-pill);
+    background: var(--surface-sunken);
+}
+
+.entry-role-switch::after {
+    content: "";
+    position: absolute;
+    top: .25rem;
+    bottom: .25rem;
+    left: .25rem;
+    width: calc(50% - .25rem);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    transition: transform .18s ease;
+}
+
+.entry-role-option {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    padding: .45rem .5rem;
+    text-align: center;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+#entry-role-student:checked ~ .entry-role-switch label[for="entry-role-student"],
+#entry-role-teacher:checked ~ .entry-role-switch label[for="entry-role-teacher"] {
+    color: var(--brand-900);
+}
+
+#entry-role-teacher:checked ~ .entry-role-switch::after {
+    transform: translateX(100%);
+}
+
+.entry-lead {
+    margin-bottom: 1rem;
+    color: var(--ink-soft);
+}
+
+.entry-panel-teacher {
+    display: none;
+}
+
+#entry-role-teacher:checked ~ .entry-panel-student {
+    display: none;
+}
+
+#entry-role-teacher:checked ~ .entry-panel-teacher {
+    display: block;
+}
+
 .auth-field {
     position: relative;
 }

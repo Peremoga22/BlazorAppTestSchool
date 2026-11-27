@@ -1,0 +1,69 @@
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage ProfileStorage
+@inject NavigationManager Navigation
+
+<form @onsubmit="StartTestAsync" @onsubmit:preventDefault class="student-entry">
+    <label class="form-label" for="student-entry-last-name">Прізвище</label>
+    <input id="student-entry-last-name" class="form-control mb-3" @bind="lastName" @bind:event="oninput"
+           maxlength="80" required autocomplete="family-name" />
+
+    <label class="form-label" for="student-entry-first-name">Ім’я</label>
+    <input id="student-entry-first-name" class="form-control mb-3" @bind="firstName" @bind:event="oninput"
+           maxlength="80" required autocomplete="given-name" />
+
+    <label class="form-label" for="student-entry-patronymic">По батькові</label>
+    <input id="student-entry-patronymic" class="form-control mb-3" @bind="patronymic" @bind:event="oninput"
+           maxlength="80" required autocomplete="additional-name" />
+
+    <label class="form-label" for="student-entry-grade">Клас</label>
+    <select id="student-entry-grade" class="form-select mb-3" @bind="grade" required>
+        <option value="">Обери клас</option>
+        <option value="7">7 клас</option>
+        <option value="11">11 клас</option>
+    </select>
+
+    @if (error is not null)
+    {
+        <p class="text-danger" role="alert">@error</p>
+    }
+
+    <button class="w-100 btn btn-lg btn-primary" disabled="@saving">
+        @(saving ? "Відкриваємо тест…" : "Почати тест")
+    </button>
+</form>
+
+@code {
+    private string lastName = string.Empty;
+    private string firstName = string.Empty;
+    private string patronymic = string.Empty;
+    private int? grade;
+    private string? error;
+    private bool saving;
+
+    private async Task StartTestAsync()
+    {
+        if (saving)
+        {
+            return;
+        }
+
+        var candidate = new BiologyProfile(lastName.Trim(), firstName.Trim(), patronymic.Trim(), grade ?? 0);
+        if (!candidate.IsValid)
+        {
+            error = "Введи прізвище, ім’я, по батькові та обери клас.";
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            await ProfileStorage.SetAsync(BiologyProfile.StorageKey, candidate);
+            error = null;
+            Navigation.NavigateTo("biology-test");
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

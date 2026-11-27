@@ -28,6 +28,21 @@
 
     <div class="auth-form">
         <h2 class="auth-form-heading">Вхід до системи</h2>
+
+        <div class="entry-role">
+            <input class="entry-role-input" type="radio" name="entry-role" id="entry-role-student" checked="@(errorMessage is null)" />
+            <input class="entry-role-input" type="radio" name="entry-role" id="entry-role-teacher" checked="@(errorMessage is not null)" />
+            <div class="entry-role-switch" role="radiogroup" aria-label="Хто входить">
+                <label class="entry-role-option" for="entry-role-student">Учень</label>
+                <label class="entry-role-option" for="entry-role-teacher">Вчитель</label>
+            </div>
+
+            <div class="entry-panel entry-panel-student">
+                <p class="entry-lead">Заповни анкету — і одразу перейдеш до тесту.</p>
+                <StudentEntry @rendermode="InteractiveServer" />
+            </div>
+
+            <div class="entry-panel entry-panel-teacher">
         <StatusMessage Message="@errorMessage" />
         <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
             <DataAnnotationsValidator />
@@ -80,6 +95,8 @@
                 <a href="Account/ResendEmailConfirmation">Надіслати підтвердження email ще раз</a>
             </div>
         </EditForm>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -141,7 +158,7 @@
         if (result.Succeeded)
         {
             Logger.LogInformation("User logged in.");
-            RedirectManager.RedirectTo(ReturnUrl);
+            RedirectManager.RedirectTo(TeacherDestination());
         }
         else if (result.RequiresTwoFactor)
         {
@@ -174,5 +191,24 @@
         public bool RememberMe { get; set; }
 
         public PasskeyInputModel? Passkey { get; set; }
+    }
+
+    private string TeacherDestination()
+    {
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            return "teacher";
+        }
+
+        var path = ReturnUrl;
+        if (Uri.TryCreate(ReturnUrl, UriKind.Absolute, out var absolute))
+        {
+            path = absolute.AbsolutePath;
+        }
+
+        path = path.Trim('/');
+        return path.Length == 0 || path.Equals("Account/Login", StringComparison.OrdinalIgnoreCase)
+            ? "teacher"
+            : ReturnUrl;
     }
 }

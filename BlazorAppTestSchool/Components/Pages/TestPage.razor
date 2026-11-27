@@ -1,6 +1,8 @@
 @page "/biology-test"
 @layout BiologyLayout
 @rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using BlazorAppTestSchool.Data.Testing
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @inject ProtectedSessionStorage ProfileStorage

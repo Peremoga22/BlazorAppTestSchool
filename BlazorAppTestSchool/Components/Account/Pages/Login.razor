@@ -156,17 +156,17 @@
         }
         else
         {
-            errorMessage = "Error: Invalid login attempt.";
+            errorMessage = "Невірний логін або пароль.";
         }
     }
 
     private sealed class InputModel
     {
-        [Required]
-        [EmailAddress]
+        [Required(ErrorMessage = "Введи логін.")]
+        [EmailAddress(ErrorMessage = "Логін має бути адресою email.")]
         public string Email { get; set; } = "";
 
-        [Required]
+        [Required(ErrorMessage = "Введи пароль.")]
         [DataType(DataType.Password)]
         public string Password { get; set; } = "";
 

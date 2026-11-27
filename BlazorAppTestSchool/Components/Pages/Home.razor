@@ -3,10 +3,12 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
+@using BlazorAppTestSchool.Data
 @using BlazorAppTestSchool.Data.Testing
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @inject ProtectedSessionStorage ProfileStorage
 @inject TestDefinitionStore TestStore
+@inject BiologyAttemptStore AttemptStore
 
 <PageTitle>Контрольна з біології | 7 клас</PageTitle>
 
@@ -52,6 +54,14 @@ else
         @if (!testCheckDone)
         {
             <p role="status">Перевіряємо наявність контрольної…</p>
+        }
+        else if (!canStart)
+        {
+            <h1 id="test-heading">Контрольну вже здано</h1>
+            <p class="mb-0">
+                Прізвище @participant.LastName вже є серед робіт @participant.Grade класу,
+                тож пройти тест ще раз не можна. Коли вчитель натисне «Апрувнути», онови сторінку.
+            </p>
         }
         else if (!hasActiveTest)
         {
@@ -107,6 +117,7 @@ else
     private BiologyProfile? profile;
     private bool testCheckDone;
     private bool hasActiveTest;
+    private bool canStart = true;
     private string lastName = string.Empty;
     private string firstName = string.Empty;
     private string patronymic = string.Empty;
@@ -138,6 +149,7 @@ else
         testCheckDone = false;
         var activeTests = await TestStore.ListActiveAsync(BiologySeed.Subject, participant.Grade);
         hasActiveTest = activeTests.Length > 0;
+        canStart = await AttemptStore.CanStartAsync(participant.LastName, participant.Grade);
         testCheckDone = true;
         StateHasChanged();
     }

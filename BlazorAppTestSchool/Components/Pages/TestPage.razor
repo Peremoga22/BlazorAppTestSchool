@@ -1,10 +1,12 @@
 @page "/biology-test"
 @layout BiologyLayout
 @rendermode InteractiveServer
+@using BlazorAppTestSchool.Data
 @using BlazorAppTestSchool.Data.Testing
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @inject ProtectedSessionStorage ProfileStorage
 @inject TestDefinitionStore TestStore
+@inject BiologyAttemptStore AttemptStore
 @inject NavigationManager Navigation
 
 @if (profile is not { } participant)
@@ -14,6 +16,19 @@
 else if (!testReady)
 {
     <p role="status">Завантажуємо контрольну…</p>
+}
+else if (!canStart)
+{
+    <section class="school-lab school-lab-intro" aria-labelledby="already-taken-heading">
+        <p class="school-lab-subject">@participant.LastName · @participant.Grade клас</p>
+        <h1 id="already-taken-heading">Контрольну вже здано</h1>
+        <p>
+            Прізвище @participant.LastName вже є серед робіт @participant.Grade класу.
+            Повернутися до тесту і пройти його вдруге не можна.
+            Коли вчитель натисне «Апрувнути», онови сторінку — і можна буде пройти ще раз.
+        </p>
+        <a class="btn btn-outline-secondary" href="">На головну</a>
+    </section>
 }
 else if (variants.Length == 0)
 {
@@ -77,6 +92,7 @@ else
     private TestDefinitionSummary[] variants = [];
     private TestDefinitionModel? test;
     private bool testReady;
+    private bool canStart = true;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -110,6 +126,15 @@ else
     {
         testReady = false;
         StateHasChanged();
+
+        canStart = await AttemptStore.CanStartAsync(participant.LastName, participant.Grade);
+        if (!canStart)
+        {
+            test = null;
+            testReady = true;
+            StateHasChanged();
+            return;
+        }
 
         variants = await TestStore.ListActiveAsync(BiologySeed.Subject, participant.Grade);
 

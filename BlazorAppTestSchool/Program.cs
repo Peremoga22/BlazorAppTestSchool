@@ -48,6 +48,18 @@ var app = builder.Build();
 
 try
 {
+    await using var scope = app.Services.CreateAsyncScope();
+    var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await database.Database.MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<BiologyAttemptStore>().BackfillLastNameKeysAsync();
+}
+catch (Exception exception)
+{
+    app.Logger.LogWarning(exception, "Could not apply database migrations.");
+}
+
+try
+{
     var testStore = app.Services.GetRequiredService<TestDefinitionStore>();
     if (!await testStore.HasAnyAsync())
     {

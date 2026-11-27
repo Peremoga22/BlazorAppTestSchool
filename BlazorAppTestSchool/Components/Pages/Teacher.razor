@@ -48,6 +48,19 @@ else
                     <a class="btn btn-primary" href="@($"teacher/reports/{Attempt}/word")" data-enhance-nav="false">
                         Завантажити Word
                     </a>
+                    @if (result.LastName is { Length: > 0 } || result.StudentName.Length > 0)
+                    {
+                        @if (retakeOpen)
+                        {
+                            <span class="school-lab-subject mb-0">Дозволено ще раз</span>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-outline-primary" @onclick="ApproveReportRetakeAsync">
+                                Апрувнути
+                            </button>
+                        }
+                    }
                 </div>
                 <h2 id="report-heading" class="h4">@result.StudentName · @result.Grade клас</h2>
                 @if (result.TestTitle is { Length: > 0 } variant)
@@ -267,8 +280,19 @@ else
                                                 </td>
                                                 <td>@FormatDuration(item.Duration)</td>
                                                 <td>@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
-                                                <td class="d-flex gap-2">
+                                                <td class="d-flex flex-wrap gap-2">
                                                     <a href="@ReportUrl(item.Id)">Переглянути</a>
+                                                    @if (item.RetakeOpen)
+                                                    {
+                                                        <span class="align-self-center">Дозволено</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                                                @onclick="() => ApproveRetakeAsync(board, item)">
+                                                            Апрувнути
+                                                        </button>
+                                                    }
                                                     <button type="button" class="btn btn-sm btn-outline-danger"
                                                             @onclick="() => DeleteAttemptAsync(board, item.Id)">
                                                         Видалити
@@ -317,6 +341,7 @@ else
 
     private TestDefinitionModel? previewTest;
     private BiologyAttemptReport? report;
+    private bool retakeOpen;
     private readonly List<GradeBoard> boards = [];
     private TestDefinitionSummary[] allTests = [];
     private TestFolderSummary[] folders = [];
@@ -362,6 +387,11 @@ else
             if (report is null)
             {
                 message = "Роботу не знайдено.";
+            }
+            else
+            {
+                var lastName = BiologyAttemptStore.LastNameOf(report);
+                retakeOpen = await AttemptStore.HasOpenRetakeAsync(lastName, report.Grade, CancellationToken.None);
             }
         }
         catch (Exception exception)
@@ -466,6 +496,35 @@ else
     {
         board.Page = page;
         await ReloadBoardAsync(board);
+    }
+
+    private async Task ApproveRetakeAsync(GradeBoard board, BiologyAttemptSummary item)
+    {
+        var name = item.StudentName;
+        if (!await JS.InvokeAsync<bool>("confirm", $"Дозволити {name} пройти контрольну ще раз?"))
+        {
+            return;
+        }
+
+        await AttemptStore.ApproveRetakeAsync(item.LastNameKey, item.Grade);
+        await ReloadBoardAsync(board);
+    }
+
+    private async Task ApproveReportRetakeAsync()
+    {
+        if (report is not { } result)
+        {
+            return;
+        }
+
+        var lastName = BiologyAttemptStore.LastNameOf(result);
+        if (!await JS.InvokeAsync<bool>("confirm", $"Дозволити {result.StudentName} пройти контрольну ще раз?"))
+        {
+            return;
+        }
+
+        await AttemptStore.ApproveRetakeAsync(lastName, result.Grade);
+        retakeOpen = true;
     }
 
     private async Task DeleteAttemptAsync(GradeBoard board, Guid attemptId)

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace BlazorAppTestSchool.Data;
 
 public sealed class BiologyAttempt
@@ -7,6 +9,21 @@ public sealed class BiologyAttempt
     public int Grade { get; init; }
     public required string StudentName { get; init; }
     public required string ReportJson { get; init; }
+
+    /// <summary>Trimmed, lowercased surname. Used to refuse a second attempt.</summary>
+    [MaxLength(80)]
+    public string LastNameKey { get; set; } = "";
+}
+
+/// <summary>A teacher's one-time permission for a surname in a grade to take the test again.</summary>
+public sealed class BiologyRetakeApproval
+{
+    public Guid Id { get; set; }
+    [MaxLength(80)]
+    public string LastNameKey { get; set; } = "";
+    public int Grade { get; set; }
+    public DateTimeOffset ApprovedAt { get; set; }
+    public DateTimeOffset? ConsumedAt { get; set; }
 }
 
 public sealed record BiologyAttemptReport(

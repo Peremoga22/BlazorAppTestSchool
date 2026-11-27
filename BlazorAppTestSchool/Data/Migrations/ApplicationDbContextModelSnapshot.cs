@@ -97,6 +97,11 @@ namespace BlazorAppTestSchool.Migrations
                     b.Property<int>("Grade")
                         .HasColumnType("int");
 
+                    b.Property<string>("LastNameKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
                     b.Property<string>("ReportJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -110,7 +115,36 @@ namespace BlazorAppTestSchool.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LastNameKey", "Grade");
+
                     b.ToTable("BiologyAttempts");
+                });
+
+            modelBuilder.Entity("BlazorAppTestSchool.Data.BiologyRetakeApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ApprovedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Grade")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LastNameKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastNameKey", "Grade");
+
+                    b.ToTable("BiologyRetakeApprovals");
                 });
 
             modelBuilder.Entity("BlazorAppTestSchool.Data.Testing.TestDefinitionEntity", b =>

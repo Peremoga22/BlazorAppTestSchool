@@ -7,6 +7,7 @@ namespace BlazorAppTestSchool.Data
     public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
     {
         public DbSet<BiologyAttempt> BiologyAttempts => Set<BiologyAttempt>();
+        public DbSet<BiologyRetakeApproval> BiologyRetakeApprovals => Set<BiologyRetakeApproval>();
         public DbSet<TestDefinitionEntity> TestDefinitions => Set<TestDefinitionEntity>();
         public DbSet<TestFolderEntity> TestFolders => Set<TestFolderEntity>();
     }

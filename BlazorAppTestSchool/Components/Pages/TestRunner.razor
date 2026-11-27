@@ -38,7 +38,11 @@
         {
             @if (reportSaved)
             {
-                <p>Роботу здано. Вчитель може переглянути результат у списку робіт.</p>
+                <p>Роботу здано. Вчитель може переглянути результат у списку робіт. Повторно пройти контрольну можна лише після дозволу вчителя.</p>
+            }
+            else if (alreadySubmitted)
+            {
+                <p class="text-danger" role="alert">Це прізвище вже здавало контрольну. Тест вдруге не зберігається, доки вчитель не натисне «Апрувнути».</p>
             }
             else if (savingReport)
             {
@@ -244,6 +248,7 @@ else
     private readonly Guid attemptId = Guid.NewGuid();
     private bool savingReport;
     private bool reportSaved;
+    private bool alreadySubmitted;
     private bool saveFailed;
     private TimeSpan attemptDuration;
     private int secondsLeft;
@@ -540,7 +545,13 @@ else
                 Patronymic = participant.Patronymic,
                 TestTitle = Test.Title
             };
-            await AttemptStore.SaveAsync(attemptId, report);
+            if (!await AttemptStore.SaveAsync(attemptId, report))
+            {
+                alreadySubmitted = true;
+                saveFailed = true;
+                return;
+            }
+
             reportSaved = true;
         }
         catch (Exception exception)

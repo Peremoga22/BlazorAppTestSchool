@@ -133,6 +133,10 @@ namespace BlazorAppTestSchool.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("nvarchar(80)");
 
+                    b.Property<string>("Subject")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("LastNameKey", "Grade");

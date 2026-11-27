@@ -18,6 +18,8 @@ public sealed class BiologyRetakeApproval
     [MaxLength(80)]
     public string LastNameKey { get; set; } = "";
     public int Grade { get; set; }
+    [MaxLength(120)]
+    public string? Subject { get; set; }
     public DateTimeOffset ApprovedAt { get; set; }
     public DateTimeOffset? ConsumedAt { get; set; }
 }

@@ -56,10 +56,10 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
             return true;
         }
 
-        return await HasOpenRetakeAsync(key, grade, cancellationToken);
+        return await HasOpenRetakeAsync(key, grade, subject, cancellationToken);
     }
 
-    public async Task<bool> HasOpenRetakeAsync(string lastName, int grade, CancellationToken cancellationToken = default)
+    public async Task<bool> HasOpenRetakeAsync(string lastName, int grade, string? subject = null, CancellationToken cancellationToken = default)
     {
         var key = NormalizeLastName(lastName);
         if (key.Length == 0)
@@ -71,9 +71,11 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         try
         {
-            return await database.BiologyRetakeApprovals.AsNoTracking()
-                .AnyAsync(approval => approval.LastNameKey == key && approval.Grade == grade && approval.ConsumedAt == null,
-                    cancellationToken);
+            var subjects = await database.BiologyRetakeApprovals.AsNoTracking()
+                .Where(approval => approval.LastNameKey == key && approval.Grade == grade && approval.ConsumedAt == null)
+                .Select(approval => approval.Subject)
+                .ToListAsync(cancellationToken);
+            return subjects.Any(existing => SubjectsMatch(existing, subject));
         }
         catch (Exception exception)
         {
@@ -82,7 +84,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
         }
     }
 
-    public async Task ApproveRetakeAsync(string lastName, int grade, CancellationToken cancellationToken = default)
+    public async Task ApproveRetakeAsync(string lastName, int grade, string? subject = null, CancellationToken cancellationToken = default)
     {
         var key = NormalizeLastName(lastName);
         if (key.Length == 0)
@@ -90,12 +92,14 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
             return;
         }
 
+        var normalizedSubject = NormalizeSubject(subject);
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var alreadyOpen = await database.BiologyRetakeApprovals
-            .AnyAsync(approval => approval.LastNameKey == key && approval.Grade == grade && approval.ConsumedAt == null,
-                cancellationToken);
-        if (alreadyOpen)
+        var openSubjects = await database.BiologyRetakeApprovals
+            .Where(approval => approval.LastNameKey == key && approval.Grade == grade && approval.ConsumedAt == null)
+            .Select(approval => approval.Subject)
+            .ToListAsync(cancellationToken);
+        if (openSubjects.Any(existing => SubjectsMatch(existing, normalizedSubject)))
         {
             return;
         }
@@ -105,6 +109,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
             Id = Guid.NewGuid(),
             LastNameKey = key,
             Grade = grade,
+            Subject = normalizedSubject,
             ApprovedAt = DateTimeOffset.UtcNow
         });
         await database.SaveChangesAsync(cancellationToken);
@@ -134,10 +139,11 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
         var taken = key.Length > 0 && await HasSubmittedAsync(database, key, report.Grade, subject, CancellationToken.None);
         if (taken)
         {
-            var grant = await database.BiologyRetakeApprovals
+            var grants = await database.BiologyRetakeApprovals
                 .Where(approval => approval.LastNameKey == key && approval.Grade == report.Grade && approval.ConsumedAt == null)
                 .OrderBy(approval => approval.ApprovedAt)
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+            var grant = grants.FirstOrDefault(approval => SubjectsMatch(approval.Subject, subject));
             if (grant is null)
             {
                 return false;
@@ -188,9 +194,13 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
             .Select(attempt => new AttemptRow(attempt.Id, attempt.SubmittedAt, attempt.Grade, attempt.StudentName, attempt.ReportJson))
             .ToArrayAsync(cancellationToken);
 
+        var catalog = await database.TestDefinitions.AsNoTracking()
+            .Select(test => new TestDefinitionSummary(
+                test.Id, test.Title, test.Subject, test.Grade, test.UploadedAt, test.IsActive, test.FolderId))
+            .ToArrayAsync(cancellationToken);
         var openRetakes = await OpenRetakeKeysAsync(database, grade, cancellationToken);
 
-        return attempts.Select(attempt => ToSummary(attempt, openRetakes)).ToArray();
+        return attempts.Select(attempt => ToSummary(attempt, openRetakes, catalog)).ToArray();
     }
 
     private async Task<bool> HasSubmittedAsync(
@@ -248,27 +258,29 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
     {
         try
         {
-            var keys = await database.BiologyRetakeApprovals.AsNoTracking()
+            var rows = await database.BiologyRetakeApprovals.AsNoTracking()
                 .Where(approval => approval.Grade == grade && approval.ConsumedAt == null)
-                .Select(approval => approval.LastNameKey)
+                .Select(approval => new { approval.LastNameKey, approval.Subject })
                 .ToListAsync(cancellationToken);
-            return keys.ToHashSet(StringComparer.Ordinal);
+            return rows
+                .Select(row => RetakeKey(row.LastNameKey, row.Subject))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Could not read retake approvals. The submitted papers are still listed.");
-            return new HashSet<string>(StringComparer.Ordinal);
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
     }
 
-    private static BiologyAttemptSummary ToSummary(AttemptRow attempt, HashSet<string> openRetakes)
+    private static BiologyAttemptSummary ToSummary(AttemptRow attempt, HashSet<string> openRetakes, TestDefinitionSummary[] catalog)
     {
         if (!TryRead(attempt.ReportJson, out var report))
         {
             var fallbackName = string.IsNullOrWhiteSpace(attempt.StudentName) ? "Без прізвища" : attempt.StudentName;
             var fallbackKey = NormalizeLastName(FirstWord(fallbackName));
             return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, fallbackName, attempt.Grade,
-                0, 0, false, TimeSpan.Zero, null, fallbackKey, openRetakes.Contains(fallbackKey), null);
+                0, 0, false, TimeSpan.Zero, null, fallbackKey, false, null);
         }
 
         var questions = report.Questions ?? [];
@@ -279,10 +291,28 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogg
         }
 
         var lastNameKey = NormalizeLastName(LastNameOf(report));
+        var subject = SubjectOf(report, catalog);
+        var retakeOpen = lastNameKey.Length > 0 && openRetakes.Contains(RetakeKey(lastNameKey, subject));
         return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, name, report.Grade, report.Score,
             questions.Length, questions.Any(question => question.Points is null), report.Duration, report.TestTitle,
-            lastNameKey, lastNameKey.Length > 0 && openRetakes.Contains(lastNameKey), report.TestId);
+            lastNameKey, retakeOpen, report.TestId);
     }
+
+    private static string? SubjectOf(BiologyAttemptReport report, TestDefinitionSummary[] catalog)
+    {
+        var owner = AttemptFolderLink.OwningTestId(report.TestId, report.TestTitle, report.Grade, catalog);
+        var subject = owner is Guid id ? catalog.FirstOrDefault(test => test.Id == id)?.Subject : null;
+        return NormalizeSubject(subject);
+    }
+
+    private static string RetakeKey(string lastNameKey, string? subject) =>
+        lastNameKey + "\u001f" + (NormalizeSubject(subject) ?? "");
+
+    private static string? NormalizeSubject(string? subject) =>
+        string.IsNullOrWhiteSpace(subject) ? null : subject.Trim();
+
+    private static bool SubjectsMatch(string? left, string? right) =>
+        string.Equals(NormalizeSubject(left), NormalizeSubject(right), StringComparison.OrdinalIgnoreCase);
 
     private static bool TryRead(string? json, out BiologyAttemptReport report)
     {

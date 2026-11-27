@@ -170,7 +170,8 @@ else
                     <p>
                         Завантаж файл тесту у форматі JSON за
                         <a href="test-template.json" data-enhance-nav="false">стандартом (шаблон)</a>
-                        або створи <a href="@BuilderUrl()">конструктором</a> — він з'явиться саме тут.
+                        або створи <a href="@BuilderUrl()">конструктором</a>.
+                        Кожен клас у цій папці окремо: контрольні й роботи 8, 9, 10 і 11 класів не змішуються.
                     </p>
                     <div class="teacher-upload">
                         <InputFile OnChange="OnFileSelectedAsync" accept=".json" class="form-control" />
@@ -189,61 +190,147 @@ else
                         <p class="text-success mt-2" role="status">@uploadSuccess</p>
                     }
 
-                    @if (folderTests.Length == 0)
+                    @{
+                        var lanes = FolderLanes();
+                    }
+                    @if (lanes.Length == 0)
                     {
                         <p class="text-muted mt-3">У цій папці ще немає тестів.</p>
                     }
                     else
                     {
-                        <div class="table-responsive responsive-table mt-3">
-                            <table class="table align-middle">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Назва</th>
-                                        <th scope="col">Предмет / клас</th>
-                                        <th scope="col">Завантажено</th>
-                                        <th scope="col">Статус</th>
-                                        <th scope="col"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var test in folderTests)
+                        @foreach (var lane in lanes)
+                        {
+                            var board = lane.Grade is int grade ? boards.FirstOrDefault(item => item.Grade == grade) : null;
+                            <section class="grade-lane" aria-labelledby="@lane.Key" @key="lane.Key">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <h3 id="@lane.Key" class="grade-lane-title">@lane.Title</h3>
+                                    @if (board is not null)
                                     {
-                                        <tr @key="test.Id">
-                                            <td data-label="Назва">@test.Title</td>
-                                            <td data-label="Предмет / клас">@test.Subject @(test.Grade is { } g ? $"· {g} клас" : null)</td>
-                                            <td data-label="Завантажено">@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                            <td class="test-status" data-label="Статус">
-                                                <div class="attempt-actions-row">
-                                                    @if (test.IsActive)
-                                                    {
-                                                        <span class="badge text-bg-success">Активний</span>
-                                                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => DeactivateAsync(test.Id)">
-                                                            Деактивувати
-                                                        </button>
-                                                    }
-                                                    else
-                                                    {
-                                                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ActivateAsync(test.Id)">
-                                                            Активувати
-                                                        </button>
-                                                    }
-                                                </div>
-                                            </td>
-                                            <td class="test-actions" data-label="Дії">
-                                                <div class="attempt-actions-row">
-                                                    <a class="btn btn-sm btn-outline-secondary" href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
-                                                    <a class="btn btn-sm btn-outline-primary" href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
-                                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTestAsync(test)">
-                                                        Видалити
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                        <input class="form-control form-control-sm board-search" placeholder="Пошук за прізвищем…"
+                                               value="@board.Search" @oninput="e => OnSearchChangedAsync(board, e.Value?.ToString() ?? string.Empty)" />
                                     }
-                                </tbody>
-                            </table>
-                        </div>
+                                </div>
+
+                                @if (lane.Tests.Length == 0)
+                                {
+                                    <p class="text-muted">Контрольних для цього класу ще немає.</p>
+                                }
+                                else
+                                {
+                                    <div class="table-responsive responsive-table">
+                                        <table class="table align-middle mb-3">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Назва</th>
+                                                    <th scope="col">Завантажено</th>
+                                                    <th scope="col">Статус</th>
+                                                    <th scope="col"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var test in lane.Tests)
+                                                {
+                                                    <tr @key="test.Id">
+                                                        <td data-label="Назва">@test.Title</td>
+                                                        <td data-label="Завантажено">@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                                        <td class="test-status" data-label="Статус">
+                                                            <div class="attempt-actions-row">
+                                                                @if (test.IsActive)
+                                                                {
+                                                                    <span class="badge text-bg-success">Активний</span>
+                                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => DeactivateAsync(test.Id)">
+                                                                        Деактивувати
+                                                                    </button>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ActivateAsync(test.Id)">
+                                                                        Активувати
+                                                                    </button>
+                                                                }
+                                                            </div>
+                                                        </td>
+                                                        <td class="test-actions" data-label="Дії">
+                                                            <div class="attempt-actions-row">
+                                                                <a class="btn btn-sm btn-outline-secondary" href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
+                                                                <a class="btn btn-sm btn-outline-primary" href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
+                                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTestAsync(test)">
+                                                                    Видалити
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+
+                                @if (lane.Attempts.Length == 0)
+                                {
+                                    <p class="mb-2">@(board?.Search.Length > 0 ? "Нічого не знайдено." : "Цей клас ще ніхто не здав.")</p>
+                                }
+                                else
+                                {
+                                    <div class="table-responsive responsive-table">
+                                        <table class="table align-middle mb-2">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Учень</th>
+                                                    <th scope="col">Варіант</th>
+                                                    <th scope="col">Оцінка</th>
+                                                    <th scope="col">Час</th>
+                                                    <th scope="col">Здано</th>
+                                                    <th scope="col"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var item in lane.Attempts)
+                                                {
+                                                    <tr @key="item.Id">
+                                                        <th scope="row" data-label="Учень">@(string.IsNullOrWhiteSpace(item.StudentName) ? "Без прізвища" : item.StudentName)</th>
+                                                        <td data-label="Варіант">@(item.TestTitle ?? "—")</td>
+                                                        <td data-label="Оцінка">
+                                                            @item.Score з @item.MaxScore
+                                                            @if (item.PendingReview)
+                                                            {
+                                                                <span class="d-block small">Попередня</span>
+                                                            }
+                                                        </td>
+                                                        <td data-label="Час">@FormatDuration(item.Duration)</td>
+                                                        <td data-label="Здано">@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
+                                                        <td class="attempt-actions" data-label="Дії">
+                                                            <div class="attempt-actions-row">
+                                                                <a class="btn btn-sm btn-outline-secondary" href="@ReportUrl(item.Id)">Переглянути</a>
+                                                                @if (item.RetakeOpen)
+                                                                {
+                                                                    <span class="attempt-allowed">Дозволено</span>
+                                                                }
+                                                                else if (board is not null)
+                                                                {
+                                                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                                                            @onclick="() => ApproveRetakeAsync(board, item)">
+                                                                        Апрувнути
+                                                                    </button>
+                                                                }
+                                                                @if (board is not null)
+                                                                {
+                                                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                                                            @onclick="() => DeleteAttemptAsync(board, item.Id)">
+                                                                        Видалити
+                                                                    </button>
+                                                                }
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            </section>
+                        }
                     }
                 </section>
             }
@@ -279,84 +366,6 @@ else
                     }
                 </section>
             }
-            else if (boards.Count == 0)
-            {
-                <h2 class="h4">Роботи учнів</h2>
-                <p>У цій папці ще немає зданих робіт.</p>
-            }
-            else
-            {
-                @foreach (var board in boards)
-                {
-                    <section class="school-lab mb-4" aria-labelledby="@($"board-heading-{board.Grade}")" @key="board.Grade">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                            <h2 id="@($"board-heading-{board.Grade}")" class="h4 mb-0">@board.Grade клас · здано @board.Attempts.Length</h2>
-                            <input class="form-control form-control-sm board-search" placeholder="Пошук за прізвищем…"
-                                   value="@board.Search" @oninput="e => OnSearchChangedAsync(board, e.Value?.ToString() ?? string.Empty)" />
-                        </div>
-
-                        @if (board.Attempts.Length == 0)
-                        {
-                            <p>@(board.Search.Length > 0 ? "Нічого не знайдено." : "Ще немає зданих робіт.")</p>
-                        }
-                        else
-                        {
-                            <div class="table-responsive responsive-table">
-                                <table class="table align-middle">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">Учень</th>
-                                            <th scope="col">Варіант</th>
-                                            <th scope="col">Оцінка</th>
-                                            <th scope="col">Час</th>
-                                            <th scope="col">Здано</th>
-                                            <th scope="col"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var item in board.Attempts)
-                                        {
-                                            <tr @key="item.Id">
-                                                <th scope="row" data-label="Учень">@(string.IsNullOrWhiteSpace(item.StudentName) ? "Без прізвища" : item.StudentName)</th>
-                                                <td data-label="Варіант">@(item.TestTitle ?? "—")</td>
-                                                <td data-label="Оцінка">
-                                                    @item.Score з @item.MaxScore
-                                                    @if (item.PendingReview)
-                                                    {
-                                                        <span class="d-block small">Попередня</span>
-                                                    }
-                                                </td>
-                                                <td data-label="Час">@FormatDuration(item.Duration)</td>
-                                                <td data-label="Здано">@(item.SubmittedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
-                                                <td class="attempt-actions" data-label="Дії">
-                                                    <div class="attempt-actions-row">
-                                                        <a class="btn btn-sm btn-outline-secondary" href="@ReportUrl(item.Id)">Переглянути</a>
-                                                        @if (item.RetakeOpen)
-                                                        {
-                                                            <span class="attempt-allowed">Дозволено</span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <button type="button" class="btn btn-sm btn-outline-primary"
-                                                                    @onclick="() => ApproveRetakeAsync(board, item)">
-                                                                Апрувнути
-                                                            </button>
-                                                        }
-                                                        <button type="button" class="btn btn-sm btn-outline-danger"
-                                                                @onclick="() => DeleteAttemptAsync(board, item.Id)">
-                                                            Видалити
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                    </section>
-                }
-            }
         }
     </section>
 }
@@ -374,6 +383,7 @@ else
 
     private TestDefinitionModel? previewTest;
     private BiologyAttemptReport? report;
+    private string? reportSubject;
     private bool retakeOpen;
     private readonly List<GradeBoard> boards = [];
     private TestDefinitionSummary[] allTests = [];
@@ -467,6 +477,7 @@ else
                 }
 
                 report = null;
+                reportSubject = null;
                 retakeOpen = false;
                 message = null;
                 allTests = tests;
@@ -489,6 +500,7 @@ else
             }
 
             report = found;
+            reportSubject = null;
             if (report is null)
             {
                 message = "Роботу не знайдено.";
@@ -496,7 +508,10 @@ else
             else
             {
                 var lastName = BiologyAttemptStore.LastNameOf(report);
-                retakeOpen = await AttemptStore.HasOpenRetakeAsync(lastName, report.Grade, CancellationToken.None);
+                reportSubject = report.TestId is Guid testId
+                    ? (await TestStore.GetAsync(testId))?.Subject
+                    : null;
+                retakeOpen = await AttemptStore.HasOpenRetakeAsync(lastName, report.Grade, reportSubject, CancellationToken.None);
             }
         }
         catch (Exception exception)
@@ -690,6 +705,52 @@ else
         return grades.ToArray();
     }
 
+    private GradeLane[] FolderLanes()
+    {
+        var papers = boards
+            .SelectMany(board => board.Attempts)
+            .Select(paper => new TaggedPaper(paper, SubjectLabel(paper)))
+            .ToArray();
+        var keys = folderTests
+            .Select(test => LaneKey(test.Subject, test.Grade))
+            .Concat(papers.Select(paper => LaneKey(paper.Subject, paper.Paper.Grade)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return keys
+            .Select(key =>
+            {
+                var tests = folderTests
+                    .Where(test => LaneKey(test.Subject, test.Grade).Equals(key, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(test => test.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .ToArray();
+                var attempts = papers
+                    .Where(paper => LaneKey(paper.Subject, paper.Paper.Grade).Equals(key, StringComparison.OrdinalIgnoreCase))
+                    .Select(paper => paper.Paper)
+                    .ToArray();
+                var subject = tests.FirstOrDefault(test => !string.IsNullOrWhiteSpace(test.Subject))?.Subject.Trim()
+                    ?? attempts.Select(SubjectLabel).FirstOrDefault(label => label != "Без предмета")
+                    ?? currentFolder?.Name
+                    ?? "Без предмета";
+                int? grade = tests.FirstOrDefault()?.Grade ?? (attempts.Length > 0 ? attempts[0].Grade : null);
+                var title = grade is int value ? $"{subject} · {value} клас" : subject;
+                return new GradeLane(LaneDomId(key), title, subject, grade, tests, attempts);
+            })
+            .OrderBy(lane => lane.Subject, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(lane => lane.Grade ?? int.MaxValue)
+            .ToArray();
+    }
+
+    private static string LaneKey(string? subject, int? grade) =>
+        $"{(subject ?? "").Trim()}|{grade?.ToString() ?? ""}";
+
+    private static string LaneDomId(string key)
+    {
+        var chars = key.Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '-').ToArray();
+        var text = new string(chars).Trim('-');
+        return "lane-" + (text.Length == 0 ? "grade" : text);
+    }
+
     private SubjectStat[] SubjectStats()
     {
         var papers = boards
@@ -729,6 +790,12 @@ else
 
         var subject = match?.Subject.Trim();
         return string.IsNullOrWhiteSpace(subject) ? "Без предмета" : subject;
+    }
+
+    private string? AttemptSubject(BiologyAttemptSummary paper)
+    {
+        var label = SubjectLabel(paper);
+        return label == "Без предмета" ? null : label;
     }
 
     private static int DistinctPeople(IEnumerable<TaggedPaper> papers) =>
@@ -792,7 +859,7 @@ else
 
         try
         {
-            await AttemptStore.ApproveRetakeAsync(item.LastNameKey, item.Grade);
+            await AttemptStore.ApproveRetakeAsync(item.LastNameKey, item.Grade, AttemptSubject(item));
             await ReloadBoardAsync(board);
         }
         catch (Exception exception)
@@ -817,7 +884,7 @@ else
 
         try
         {
-            await AttemptStore.ApproveRetakeAsync(lastName, result.Grade);
+            await AttemptStore.ApproveRetakeAsync(lastName, result.Grade, reportSubject);
             retakeOpen = true;
         }
         catch (Exception exception)
@@ -837,6 +904,8 @@ else
         await AttemptStore.DeleteAsync(attemptId);
         await ReloadBoardAsync(board);
     }
+
+    private sealed record GradeLane(string Key, string Title, string Subject, int? Grade, TestDefinitionSummary[] Tests, BiologyAttemptSummary[] Attempts);
 
     private sealed record TaggedPaper(BiologyAttemptSummary Paper, string Subject);
     private sealed record ClassStat(int Grade, int People);

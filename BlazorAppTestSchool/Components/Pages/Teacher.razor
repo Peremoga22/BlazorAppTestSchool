@@ -506,8 +506,16 @@ else
             return;
         }
 
-        await AttemptStore.ApproveRetakeAsync(item.LastNameKey, item.Grade);
-        await ReloadBoardAsync(board);
+        try
+        {
+            await AttemptStore.ApproveRetakeAsync(item.LastNameKey, item.Grade);
+            await ReloadBoardAsync(board);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not approve a retake.");
+            message = "Не вдалося дозволити перепроходження. Онови сторінку і спробуй ще раз.";
+        }
     }
 
     private async Task ApproveReportRetakeAsync()
@@ -523,8 +531,16 @@ else
             return;
         }
 
-        await AttemptStore.ApproveRetakeAsync(lastName, result.Grade);
-        retakeOpen = true;
+        try
+        {
+            await AttemptStore.ApproveRetakeAsync(lastName, result.Grade);
+            retakeOpen = true;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not approve a retake.");
+            message = "Не вдалося дозволити перепроходження. Онови сторінку і спробуй ще раз.";
+        }
     }
 
     private async Task DeleteAttemptAsync(GradeBoard board, Guid attemptId)

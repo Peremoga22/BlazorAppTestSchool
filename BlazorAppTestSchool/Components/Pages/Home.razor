@@ -9,10 +9,18 @@
 @inject ProtectedSessionStorage ProfileStorage
 @inject TestDefinitionStore TestStore
 @inject BiologyAttemptStore AttemptStore
+@inject ILogger<Home> Logger
 
 <PageTitle>Контрольна з біології | 7 клас</PageTitle>
 
-@if (!profileReady)
+@if (loadError is not null)
+{
+    <section class="school-lab" aria-labelledby="load-error-heading">
+        <h1 id="load-error-heading">Сторінка не відкрилася</h1>
+        <p role="alert">@loadError</p>
+    </section>
+}
+else if (!profileReady)
 {
     <p role="status">Завантажуємо профіль…</p>
 }
@@ -125,6 +133,7 @@ else
     private string? profileError;
     private bool profileReady;
     private bool savingProfile;
+    private string? loadError;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -133,14 +142,24 @@ else
             return;
         }
 
-        var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
-        profile = saved.Value is { IsValid: true } ? saved.Value : null;
-        profileReady = true;
-        StateHasChanged();
-
-        if (profile is { } participant)
+        try
         {
-            await CheckActiveTestAsync(participant);
+            var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
+            profile = saved.Success && saved.Value is { IsValid: true } ? saved.Value : null;
+            profileReady = true;
+            StateHasChanged();
+
+            if (profile is { } participant)
+            {
+                await CheckActiveTestAsync(participant);
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not open the student home page.");
+            loadError = "Не вдалося відкрити сторінку. Онови її ще раз.";
+            profileReady = true;
+            StateHasChanged();
         }
     }
 

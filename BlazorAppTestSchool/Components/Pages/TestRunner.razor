@@ -395,9 +395,10 @@ else
     }
 
     [JSInvokable]
-    public Task OnDrop(string itemId, string? zoneId)
+    public Task OnDrop(string? itemId, string? zoneId)
     {
-        if (!CanAnswer(questionIndex) || !itemId.StartsWith("opt-") || !int.TryParse(itemId[4..], out var optionIndex))
+        if (itemId is null || slotPlacements is null || questionIndex >= Questions.Length ||
+            !CanAnswer(questionIndex) || !itemId.StartsWith("opt-") || !int.TryParse(itemId[4..], out var optionIndex))
         {
             return Task.CompletedTask;
         }

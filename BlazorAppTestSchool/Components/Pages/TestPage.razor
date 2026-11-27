@@ -8,8 +8,17 @@
 @inject TestDefinitionStore TestStore
 @inject BiologyAttemptStore AttemptStore
 @inject NavigationManager Navigation
+@inject ILogger<TestPage> Logger
 
-@if (profile is not { } participant)
+@if (loadError is not null)
+{
+    <section class="school-lab" aria-labelledby="load-error-heading">
+        <h1 id="load-error-heading">Тест не відкрився</h1>
+        <p role="alert">@loadError</p>
+        <a class="btn btn-outline-secondary" href="">На головну</a>
+    </section>
+}
+else if (profile is not { } participant)
 {
     <p role="status">Завантажуємо профіль…</p>
 }
@@ -93,6 +102,7 @@ else
     private TestDefinitionModel? test;
     private bool testReady;
     private bool canStart = true;
+    private string? loadError;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -101,15 +111,24 @@ else
             return;
         }
 
-        var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
-        if (saved.Value is not { IsValid: true } participant)
+        try
         {
-            Navigation.NavigateTo("", replace: true);
-            return;
-        }
+            var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
+            if (!saved.Success || saved.Value is not { IsValid: true } participant)
+            {
+                Navigation.NavigateTo("", replace: true);
+                return;
+            }
 
-        profile = participant;
-        await RefreshTestAsync(participant);
+            profile = participant;
+            await RefreshTestAsync(participant);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not open the biology test.");
+            loadError = "Не вдалося відкрити контрольну. Онови сторінку ще раз.";
+            StateHasChanged();
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -118,7 +137,15 @@ else
         // the profile itself is only loaded once, after the first render, above.
         if (profile is { } participant)
         {
-            await RefreshTestAsync(participant);
+            try
+            {
+                await RefreshTestAsync(participant);
+            }
+            catch (Exception exception)
+            {
+                Logger.LogError(exception, "Could not open the biology test.");
+                loadError = "Не вдалося відкрити контрольну. Онови сторінку ще раз.";
+            }
         }
     }
 

@@ -60,6 +60,7 @@
 @code {
     private string? currentUrl;
     private BiologyProfile? student;
+    private bool disposed;
 
     protected override void OnInitialized()
     {
@@ -69,7 +70,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (!firstRender || disposed)
         {
             return;
         }
@@ -79,16 +80,24 @@
             var saved = await ProfileStorage.GetAsync<BiologyProfile>(BiologyProfile.StorageKey);
             student = saved.Success && saved.Value is { IsValid: true } profile ? profile : null;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or Microsoft.JSInterop.JSException or Microsoft.JSInterop.JSDisconnectedException)
+        catch (Exception)
         {
             student = null;
         }
 
-        StateHasChanged();
+        if (!disposed)
+        {
+            StateHasChanged();
+        }
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
+        if (disposed)
+        {
+            return;
+        }
+
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
         StateHasChanged();
     }
@@ -98,6 +107,7 @@
 
     public void Dispose()
     {
+        disposed = true;
         NavigationManager.LocationChanged -= OnLocationChanged;
     }
 }

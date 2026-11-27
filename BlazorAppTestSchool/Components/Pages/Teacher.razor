@@ -203,24 +203,28 @@ else
                                             <td>@test.Title</td>
                                             <td>@test.Subject @(test.Grade is { } g ? $"· {g} клас" : null)</td>
                                             <td>@test.UploadedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
-                                            <td class="d-flex align-items-center gap-2">
-                                                @if (test.IsActive)
-                                                {
-                                                    <span class="badge text-bg-success">Активний</span>
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => DeactivateAsync(test.Id)">
-                                                        Деактивувати
-                                                    </button>
-                                                }
-                                                else
-                                                {
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ActivateAsync(test.Id)">
-                                                        Активувати
-                                                    </button>
-                                                }
+                                            <td class="test-status">
+                                                <div class="attempt-actions-row">
+                                                    @if (test.IsActive)
+                                                    {
+                                                        <span class="badge text-bg-success">Активний</span>
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => DeactivateAsync(test.Id)">
+                                                            Деактивувати
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => ActivateAsync(test.Id)">
+                                                            Активувати
+                                                        </button>
+                                                    }
+                                                </div>
                                             </td>
-                                            <td class="d-flex gap-2">
-                                                <a href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
-                                                <a href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
+                                            <td class="test-actions">
+                                                <div class="attempt-actions-row">
+                                                    <a class="btn btn-sm btn-outline-secondary" href="@($"teacher/builder/{test.Id:N}")">Редагувати</a>
+                                                    <a class="btn btn-sm btn-outline-primary" href="@($"teacher?preview=true&test={test.Id:N}")">Переглянути</a>
+                                                </div>
                                             </td>
                                         </tr>
                                     }

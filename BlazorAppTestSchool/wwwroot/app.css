@@ -250,6 +250,12 @@ h1:focus {
     white-space: nowrap;
 }
 
+.test-status,
+.test-actions {
+    width: 1%;
+    white-space: nowrap;
+}
+
 .school-lab .table-responsive {
     overflow-x: auto;
 }

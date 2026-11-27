@@ -12,14 +12,6 @@ namespace BlazorAppTestSchool.Data.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "LastNameKey",
-                table: "BiologyAttempts",
-                type: "nvarchar(80)",
-                maxLength: 80,
-                nullable: false,
-                defaultValue: "");
-
             migrationBuilder.CreateTable(
                 name: "BiologyRetakeApprovals",
                 columns: table => new
@@ -36,11 +28,6 @@ namespace BlazorAppTestSchool.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_BiologyAttempts_LastNameKey_Grade",
-                table: "BiologyAttempts",
-                columns: new[] { "LastNameKey", "Grade" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_BiologyRetakeApprovals_LastNameKey_Grade",
                 table: "BiologyRetakeApprovals",
                 columns: new[] { "LastNameKey", "Grade" });
@@ -50,14 +37,6 @@ namespace BlazorAppTestSchool.Data.Migrations
         {
             migrationBuilder.DropTable(
                 name: "BiologyRetakeApprovals");
-
-            migrationBuilder.DropIndex(
-                name: "IX_BiologyAttempts_LastNameKey_Grade",
-                table: "BiologyAttempts");
-
-            migrationBuilder.DropColumn(
-                name: "LastNameKey",
-                table: "BiologyAttempts");
         }
     }
 }

@@ -9,10 +9,6 @@ public sealed class BiologyAttempt
     public int Grade { get; init; }
     public required string StudentName { get; init; }
     public required string ReportJson { get; init; }
-
-    /// <summary>Trimmed, lowercased surname. Used to refuse a second attempt.</summary>
-    [MaxLength(80)]
-    public string LastNameKey { get; set; } = "";
 }
 
 /// <summary>A teacher's one-time permission for a surname in a grade to take the test again.</summary>

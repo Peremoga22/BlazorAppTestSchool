@@ -48,7 +48,7 @@ else
                     <a class="btn btn-primary" href="@($"teacher/reports/{Attempt}/word")" data-enhance-nav="false">
                         Завантажити Word
                     </a>
-                    @if (result.LastName is { Length: > 0 } || result.StudentName.Length > 0)
+                    @if (!string.IsNullOrWhiteSpace(result.LastName) || !string.IsNullOrWhiteSpace(result.StudentName))
                     {
                         @if (retakeOpen)
                         {
@@ -242,7 +242,7 @@ else
                 {
                     <section class="school-lab mb-4" aria-labelledby="@($"board-heading-{board.Grade}")" @key="board.Grade">
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                            <h2 id="@($"board-heading-{board.Grade}")" class="h4 mb-0">@board.Grade клас</h2>
+                            <h2 id="@($"board-heading-{board.Grade}")" class="h4 mb-0">@board.Grade клас · здано @board.Attempts.Length</h2>
                             <input class="form-control form-control-sm" style="max-width:16rem" placeholder="Пошук за прізвищем…"
                                    value="@board.Search" @oninput="e => OnSearchChangedAsync(board, e.Value?.ToString() ?? string.Empty)" />
                         </div>
@@ -269,7 +269,7 @@ else
                                         @foreach (var item in board.Attempts)
                                         {
                                             <tr @key="item.Id">
-                                                <th scope="row">@item.StudentName</th>
+                                                <th scope="row">@(string.IsNullOrWhiteSpace(item.StudentName) ? "Без прізвища" : item.StudentName)</th>
                                                 <td>@(item.TestTitle ?? "—")</td>
                                                 <td>
                                                     @item.Score з @item.MaxScore
@@ -303,23 +303,6 @@ else
                                     </tbody>
                                 </table>
                             </div>
-                        }
-                        @if (board.Page > 1 || board.HasMore)
-                        {
-                            <nav class="d-flex gap-3" aria-label="@($"Сторінки робіт {board.Grade} класу")">
-                                @if (board.Page > 1)
-                                {
-                                    <button type="button" class="btn btn-link p-0" @onclick="() => ChangePageAsync(board, board.Page - 1)">
-                                        Попередня сторінка
-                                    </button>
-                                }
-                                @if (board.HasMore)
-                                {
-                                    <button type="button" class="btn btn-link p-0" @onclick="() => ChangePageAsync(board, board.Page + 1)">
-                                        Наступна сторінка
-                                    </button>
-                                }
-                            </nav>
                         }
                     </section>
                 }
@@ -366,9 +349,15 @@ else
             return;
         }
 
-        if (HttpContext is { } requestContext)
+        try
         {
-            requestContext.Response.Headers.CacheControl = "no-store";
+            if (HttpContext is { } requestContext)
+            {
+                requestContext.Response.Headers.CacheControl = "no-store";
+            }
+        }
+        catch (InvalidOperationException)
+        {
         }
 
         try
@@ -483,19 +472,20 @@ else
     }
 
     private async Task ReloadBoardAsync(GradeBoard board) =>
-        (board.Attempts, board.HasMore) = await AttemptStore.ListByGradeAsync(board.Grade, board.Page, board.Search, CancellationToken.None);
+        board.Attempts = await AttemptStore.ListByGradeAsync(board.Grade, board.Search, CancellationToken.None);
 
     private async Task OnSearchChangedAsync(GradeBoard board, string value)
     {
         board.Search = value;
-        board.Page = 1;
-        await ReloadBoardAsync(board);
-    }
-
-    private async Task ChangePageAsync(GradeBoard board, int page)
-    {
-        board.Page = page;
-        await ReloadBoardAsync(board);
+        try
+        {
+            await ReloadBoardAsync(board);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not search biology test reports.");
+            message = "Не вдалося оновити список робіт.";
+        }
     }
 
     private async Task ApproveRetakeAsync(GradeBoard board, BiologyAttemptSummary item)
@@ -558,9 +548,7 @@ else
     {
         public int Grade { get; } = grade;
         public string Search { get; set; } = string.Empty;
-        public int Page { get; set; } = 1;
         public BiologyAttemptSummary[] Attempts { get; set; } = [];
-        public bool HasMore { get; set; }
     }
 
     private async Task OnFileSelectedAsync(InputFileChangeEventArgs e)

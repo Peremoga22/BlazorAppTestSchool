@@ -1,9 +1,10 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BlazorAppTestSchool.Data;
 
-public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
+public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory, ILogger<BiologyAttemptStore> logger)
 {
     public const int PageSize = 25;
 
@@ -25,6 +26,11 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
             return report.LastName;
         }
 
+        if (string.IsNullOrWhiteSpace(report.StudentName))
+        {
+            return "";
+        }
+
         var firstWord = report.StudentName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return firstWord.Length == 0 ? "" : firstWord[0];
     }
@@ -43,8 +49,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var taken = await database.BiologyAttempts.AsNoTracking()
-            .AnyAsync(attempt => attempt.LastNameKey == key && attempt.Grade == grade, cancellationToken);
+        var taken = await HasSubmittedAsync(database, key, grade, cancellationToken);
         if (!taken)
         {
             return true;
@@ -63,9 +68,17 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        return await database.BiologyRetakeApprovals.AsNoTracking()
-            .AnyAsync(approval => approval.LastNameKey == key && approval.Grade == grade && approval.ConsumedAt == null,
-                cancellationToken);
+        try
+        {
+            return await database.BiologyRetakeApprovals.AsNoTracking()
+                .AnyAsync(approval => approval.LastNameKey == key && approval.Grade == grade && approval.ConsumedAt == null,
+                    cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Could not read retake approvals.");
+            return false;
+        }
     }
 
     public async Task ApproveRetakeAsync(string lastName, int grade, CancellationToken cancellationToken = default)
@@ -96,28 +109,6 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
         await database.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Fills LastNameKey on papers saved before the column existed.</summary>
-    public async Task BackfillLastNameKeysAsync(CancellationToken cancellationToken = default)
-    {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var missing = await database.BiologyAttempts
-            .Where(attempt => attempt.LastNameKey == "")
-            .ToListAsync(cancellationToken);
-        if (missing.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var attempt in missing)
-        {
-            var report = ReadReport(attempt.ReportJson);
-            attempt.LastNameKey = NormalizeLastName(LastNameOf(report));
-        }
-
-        await database.SaveChangesAsync(cancellationToken);
-    }
-
     /// <returns>False when this surname already submitted in the grade and the teacher has not approved a retake.</returns>
     public async Task<bool> SaveAsync(Guid attemptId, BiologyAttemptReport report)
     {
@@ -130,8 +121,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
         }
 
         var key = NormalizeLastName(LastNameOf(report));
-        var taken = key.Length > 0 && await database.BiologyAttempts
-            .AnyAsync(attempt => attempt.LastNameKey == key && attempt.Grade == report.Grade);
+        var taken = key.Length > 0 && await HasSubmittedAsync(database, key, report.Grade, CancellationToken.None);
         if (taken)
         {
             var grant = await database.BiologyRetakeApprovals
@@ -152,7 +142,6 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
             SubmittedAt = DateTimeOffset.UtcNow,
             Grade = report.Grade,
             StudentName = report.StudentName,
-            LastNameKey = key,
             ReportJson = JsonSerializer.Serialize(report)
         });
         await database.SaveChangesAsync();
@@ -171,8 +160,8 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
             .ToArrayAsync(cancellationToken);
     }
 
-    public async Task<(BiologyAttemptSummary[] Attempts, bool HasMore)> ListByGradeAsync(
-        int grade, int page, string? search, CancellationToken cancellationToken)
+    public async Task<BiologyAttemptSummary[]> ListByGradeAsync(
+        int grade, string? search, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -186,29 +175,121 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
         var attempts = await query
             .OrderByDescending(attempt => attempt.SubmittedAt)
             .ThenByDescending(attempt => attempt.Id)
-            .Skip((page - 1) * PageSize)
-            .Take(PageSize + 1)
+            .Select(attempt => new AttemptRow(attempt.Id, attempt.SubmittedAt, attempt.Grade, attempt.StudentName, attempt.ReportJson))
             .ToArrayAsync(cancellationToken);
 
-        var openRetakes = await database.BiologyRetakeApprovals.AsNoTracking()
-            .Where(approval => approval.Grade == grade && approval.ConsumedAt == null)
-            .Select(approval => approval.LastNameKey)
+        var openRetakes = await OpenRetakeKeysAsync(database, grade, cancellationToken);
+
+        return attempts.Select(attempt => ToSummary(attempt, openRetakes)).ToArray();
+    }
+
+    private async Task<bool> HasSubmittedAsync(
+        ApplicationDbContext database, string lastNameKey, int grade, CancellationToken cancellationToken)
+    {
+        var rows = await database.BiologyAttempts.AsNoTracking()
+            .Where(attempt => attempt.Grade == grade)
+            .Select(attempt => new { attempt.StudentName, attempt.ReportJson })
             .ToListAsync(cancellationToken);
 
-        var summaries = attempts.Take(PageSize).Select(attempt =>
+        foreach (var row in rows)
         {
-            var report = ReadReport(attempt.ReportJson);
-            var lastNameKey = attempt.LastNameKey.Length > 0
-                ? attempt.LastNameKey
-                : NormalizeLastName(LastNameOf(report));
-            return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, report.StudentName,
-                report.Grade, report.Score, report.Questions.Length,
-                report.Questions.Any(question => question.Points is null), report.Duration, report.TestTitle,
-                lastNameKey, openRetakes.Contains(lastNameKey));
-        }).ToArray();
+            if (!TryRead(row.ReportJson, out var report))
+            {
+                if (NormalizeLastName(FirstWord(row.StudentName)) == lastNameKey)
+                {
+                    return true;
+                }
 
-        return (summaries, attempts.Length > PageSize);
+                continue;
+            }
+
+            if (NormalizeLastName(LastNameOf(report)) == lastNameKey)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
+
+    private async Task<HashSet<string>> OpenRetakeKeysAsync(
+        ApplicationDbContext database, int grade, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var keys = await database.BiologyRetakeApprovals.AsNoTracking()
+                .Where(approval => approval.Grade == grade && approval.ConsumedAt == null)
+                .Select(approval => approval.LastNameKey)
+                .ToListAsync(cancellationToken);
+            return keys.ToHashSet(StringComparer.Ordinal);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Could not read retake approvals. The submitted papers are still listed.");
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+    }
+
+    private static BiologyAttemptSummary ToSummary(AttemptRow attempt, HashSet<string> openRetakes)
+    {
+        if (!TryRead(attempt.ReportJson, out var report))
+        {
+            var fallbackName = string.IsNullOrWhiteSpace(attempt.StudentName) ? "Без прізвища" : attempt.StudentName;
+            var fallbackKey = NormalizeLastName(FirstWord(fallbackName));
+            return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, fallbackName, attempt.Grade,
+                0, 0, false, TimeSpan.Zero, null, fallbackKey, openRetakes.Contains(fallbackKey));
+        }
+
+        var questions = report.Questions ?? [];
+        var name = string.IsNullOrWhiteSpace(report.StudentName) ? attempt.StudentName : report.StudentName;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = "Без прізвища";
+        }
+
+        var lastNameKey = NormalizeLastName(LastNameOf(report));
+        return new BiologyAttemptSummary(attempt.Id, attempt.SubmittedAt, name, report.Grade, report.Score,
+            questions.Length, questions.Any(question => question.Points is null), report.Duration, report.TestTitle,
+            lastNameKey, lastNameKey.Length > 0 && openRetakes.Contains(lastNameKey));
+    }
+
+    private static bool TryRead(string? json, out BiologyAttemptReport report)
+    {
+        report = null!;
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<BiologyAttemptReport>(json);
+            if (parsed is null)
+            {
+                return false;
+            }
+
+            report = parsed;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string FirstWord(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "";
+        }
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 0 ? "" : parts[0];
+    }
+
+    private sealed record AttemptRow(Guid Id, DateTimeOffset? SubmittedAt, int Grade, string StudentName, string ReportJson);
 
     public async Task<BiologyAttemptReport?> FindAsync(Guid attemptId, CancellationToken cancellationToken = default)
     {
@@ -219,7 +300,7 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
             .Select(attempt => attempt.ReportJson)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return reportJson is null ? null : ReadReport(reportJson);
+        return reportJson is not null && TryRead(reportJson, out var report) ? report : null;
     }
 
     public async Task DeleteAsync(Guid attemptId, CancellationToken cancellationToken = default)
@@ -228,10 +309,6 @@ public sealed class BiologyAttemptStore(IServiceScopeFactory scopeFactory)
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await database.BiologyAttempts.Where(attempt => attempt.Id == attemptId).ExecuteDeleteAsync(cancellationToken);
     }
-
-    private static BiologyAttemptReport ReadReport(string json) =>
-        JsonSerializer.Deserialize<BiologyAttemptReport>(json)
-        ?? throw new InvalidDataException("The attempt report is empty.");
 }
 
 public sealed record BiologyAttemptSummary(
